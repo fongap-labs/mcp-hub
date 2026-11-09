@@ -13,7 +13,7 @@ import {MCP_MODULES,MCP_SERVERS,toolPolicyId} from './gateway/registry.ts';
 const COOKIE='__Host-gmcp-admin';
 const locked=()=>html(renderAdminLogin({BRAND_HEAD,BRAND_NAME,BRAND_HEADER}));
 function policyCatalog(env: Env) {
-  const catalogEnv: Env={...env,GMC_WRITE_MODE:'approval',GMC_CONTENT_MODE:'enabled'};
+  const catalogEnv: Env={...env,GMC_WRITE_MODE:'approval',GMC_CONTENT_MODE:'enabled',GMC_TASK_MODE:'enabled'};
   const policyAuth: McpAuth={clientId:'admin-catalog',scopes:['mcp:read','mcp:write'],allowedOwners:[],allowedResources:[],allowedTools:[]};
   return MCP_MODULES.map(module=>({
     id:module.id,
