@@ -70,7 +70,6 @@ export interface Env {
   MCP_PUBLIC_URL: string;
   GMC_WRITE_MODE?: 'disabled' | 'approval';
   GMC_CONTENT_MODE?: 'disabled' | 'enabled';
-  GMC_TASK_MODE?: 'disabled' | 'enabled';
   MCP_OAUTH_TTL?: string;
   MCP_BUILD_SHA?: string;
   MCP_ADMIN_KEY: string;
