@@ -139,19 +139,15 @@ export async function callAgentTaskTool(
   const executionId = 'mcp-' + await sha(auth.clientId + ':' + args.request_id);
   // First writer wins on concurrent duplicate requests. There is no automatic
   // resend of an uncertain GitHub POST: duplicate work is more dangerous than a held task.
-  await env.MCP_DB.prepare(
-    "INSERT OR IGNORE INTO agent_task_dispatches(client_id,request_id,repository,project,bootstrap_ref,execution_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,'submitting',?,?)"
-  ).bind(auth.clientId, args.request_id, repository, args.project, head.sha, executionId, now(), now()).run();
+  const inserted = await env.MCP_DB.prepare(
+    "INSERT INTO agent_task_dispatches(client_id,request_id,repository,project,bootstrap_ref,execution_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,'submitting',?,?) ON CONFLICT(client_id,request_id) DO NOTHING RETURNING request_id"
+  ).bind(auth.clientId, args.request_id, repository, args.project, head.sha, executionId, now(), now()).first();
   const saved = await loadReceipt(env, auth, args.request_id);
   if (!saved) throw new PublicError('Unable to save dispatch receipt');
-  if (saved.execution_id !== executionId || saved.repository !== repository || saved.project !== args.project || saved.bootstrap_ref !== head.sha) {
-    // A concurrent caller can win with an older SHA. The operation is still
-    // deduplicated under its original request_id.
-    if (saved.execution_id !== executionId || saved.repository !== repository || saved.project !== args.project) {
-      throw new PublicError('request_id already used for a different task');
-    }
-    return receipt(saved);
+  if (saved.execution_id !== executionId || saved.repository !== repository || saved.project !== args.project) {
+    throw new PublicError('request_id already used for a different task');
   }
+  if (!inserted) return receipt(saved);
 
   let response: Response;
   try {
