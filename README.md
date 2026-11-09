@@ -2,7 +2,7 @@
 
 > **来源：Fongap Labs · 版本：v0.1.0 · 独立项目，非 GitHub 官方 MCP Server。** 此服务是面向多个 GitHub 用户／组织的第三方连接网关，与 GitHub, Inc. 及其官方 [github/github-mcp-server](https://github.com/github/github-mcp-server) 项目不存在从属、认证或背书关系。客户端应以 `mcp-hub` 注册，而不是 `github` 或 `github-mcp-server`。
 
-> **隔离边界**：本共享 MCP Hub 不提供 `fongap-bot`、Action Worker 的任务提交、执行或权限代理工具。即使 GitHub Owner 相同，普通 MCP 客户端授权也不代表获准调用 Fongap Labs 的自动化机器人。专用 Agent 入口由 Action Worker 的 GitHub 原生工作流提供，使用独立的 GitHub 身份白名单校验，并由 Action Worker 再次检查仓库能力；不复用共享 MCP 的授权。共享 Hub 不保存或签发 fongap-bot 的 GitHub App 私钥及执行令牌。
+> **隔离边界**：本共享 MCP Hub 不提供 `fongap-bot`、Action Worker 的任务提交、执行或权限代理工具。即使 GitHub Owner 相同，普通 MCP 客户端授权也不代表获准调用 Fongap Labs 的自动化机器人。专用 Agent 入口由 Action Worker 的 GitHub 原生工作流提供，使用独立的 GitHub 身份白名单校验，并由 Action Worker 再次检查仓库能力；不复用共享 MCP 的授权。共享 Hub 不保存或签发 fongap-bot 的 GitHub App 私钥及执行令牌。 普通 MCP 工具（包括创建 Issue）不能作为机器人任务执行的授权凭据。
 
 一个面向**多个 GitHub 用户名／组织名**的 MCP 网关。GitHub Token 通过独立网页添加，Worker 根据仓库所属 owner 精确选择凭据；Agent 不接受、不接触、不能读取或导出任何已存储的 GitHub Token。
 
