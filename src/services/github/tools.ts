@@ -1,5 +1,6 @@
 import type { Env, McpAuth, DataObject } from '../../types.ts';
 import type { McpTool } from '../../gateway/types.ts';
+import { callAgentTaskTool, listAgentTaskTools } from './agent-tasks.ts';
 import { PublicError, githubPath, getOwnerToken, apiFetch, summarize } from '../../github.ts';
 import { now, randomId, validOwner, validRepo } from '../../util.ts';
 
@@ -25,11 +26,15 @@ export function listGitHubTools(env: Env, auth: McpAuth): readonly McpTool[] {
   if (env.GMC_WRITE_MODE === 'approval' && auth.scopes.includes('mcp:write')) {
     tools.push(spec('github_create_issue', 'Request creating a GitHub issue; executes ONLY after independent administrator approval.', { owner: S, repo: S, title: S, body: S }, ['owner', 'repo', 'title']));
   }
+  tools.push(...listAgentTaskTools(env, auth));
   tools.push(spec('github_operation_status', 'Check the status of a write request submitted by this MCP client.', { request_id: S }, ['request_id']));
   return tools;
 }
 
 export async function callGitHubTool(name: string, args: DataObject, env: Env, auth: McpAuth): Promise<unknown> {
+  if (name === 'fongap_submit_task' || name === 'fongap_task_dispatch_status') {
+    return callAgentTaskTool(name, args, env, auth);
+  }
   const scopes = auth.scopes;
   if (!args || typeof args !== 'object' || Array.isArray(args)) throw new PublicError('Invalid arguments');
   if (name === 'github_available_owners') {
