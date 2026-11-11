@@ -8,6 +8,8 @@ function env(overrides={}){return {
   MCP_D1_ID:'12345678-1234-1234-1234-123456789abc',
   MCP_PUBLIC_URL:'https://mcp.135468.xyz',
   MCP_ACTIVE_ID:'v1',
+  MCP_ACCESS_ISSUER:'https://test-team.cloudflareaccess.com',
+  MCP_ACCESS_AUD:'test-audience',
   GMC_WRITE_MODE:'disabled',
   GMC_CONTENT_MODE:'disabled',
   MCP_OAUTH_TTL:'900',
@@ -27,10 +29,10 @@ test('Generates exact approved MCP Hub bindings, no credentials or runtime secre
  assert.deepEqual(cfg.routes,[{pattern:'mcp.135468.xyz',custom_domain:true}]);
  for(const s of SECRET_NAMES)assert.ok(!JSON.stringify(cfg).includes(s));
  assert.ok(!JSON.stringify(cfg).includes('synthetic-credential'));
- assert.equal(Object.keys(cfg.vars).length,6);
+ assert.equal(Object.keys(cfg.vars).length,8);
 });
 test('rejects invalid or incomplete deployment configurations',()=>{
- for(const x of [{MCP_D1_ID:''},{MCP_PUBLIC_URL:'http://mcp.135468.xyz'},{MCP_PUBLIC_URL:'https://mcp.example.workers.dev'},{MCP_PUBLIC_URL:'https://gmc.135468.xyz/mcp'},{GMC_WRITE_MODE:'true'},{GMC_CONTENT_MODE:'true'},{MCP_OAUTH_TTL:'120'},{MCP_ACTIVE_ID:''},{DEPLOY_SOURCE_SHA:'main'},{DEPLOY_ENVIRONMENT:'mcp-hub'},{DEPLOY_ENVIRONMENT:'mcp-hub-staging'},{DEPLOY_ENVIRONMENT:'mcp-hub-ops'},{CLOUDFLARE_API_TOKEN_SECONDARY:''}]){
+ for(const x of [{MCP_D1_ID:''},{MCP_PUBLIC_URL:'http://mcp.135468.xyz'},{MCP_PUBLIC_URL:'https://mcp.example.workers.dev'},{MCP_PUBLIC_URL:'https://gmc.135468.xyz/mcp'},{GMC_WRITE_MODE:'true'},{GMC_CONTENT_MODE:'true'},{MCP_OAUTH_TTL:'120'},{MCP_ACTIVE_ID:''},{MCP_ACCESS_ISSUER:''},{MCP_ACCESS_ISSUER:'https://wrong.example'},{MCP_ACCESS_AUD:''},{DEPLOY_SOURCE_SHA:'main'},{DEPLOY_ENVIRONMENT:'mcp-hub'},{DEPLOY_ENVIRONMENT:'mcp-hub-staging'},{DEPLOY_ENVIRONMENT:'mcp-hub-ops'},{CLOUDFLARE_API_TOKEN_SECONDARY:''}]){
    assert.throws(()=>loadDeployConfig(env(x)));
  }
 });
@@ -79,7 +81,7 @@ test('central entrypoint requires Cloudflare credentials, not runtime secrets',a
   const vars={...process.env,RUNNER_TEMP:'/tmp',DEPLOY_SOURCE_SHA:sha,
     DEPLOY_SOURCE_REPOSITORY:'fongap-labs/mcp-hub',DEPLOY_ENVIRONMENT:'production',
     GITHUB_REPOSITORY:'fongap-labs/action-worker'};
-  for(const name of ['CLOUDFLARE_API_TOKEN_SECONDARY','MCP_ADMIN_KEY','MCP_APPROVAL_KEY',
+  for(const name of ['CLOUDFLARE_API_TOKEN_SECONDARY','MCP_ADMIN_KEY','MCP_APPROVAL_KEY','MCP_TOTP_SECRET',
     'MCP_COOKIE_KEY','MCP_KEYRING_JSON','MCP_INGEST_JWK','MCP_RUNTIME_KEY'])delete vars[name];
   const r=spawnSync('bash',[script.pathname],{env:vars,encoding:'utf8'});
   assert.equal(r.status,77);
@@ -94,9 +96,9 @@ test('central entrypoint rejects any inherited runtime secret before deployment'
     DEPLOY_SOURCE_REPOSITORY:'fongap-labs/mcp-hub',DEPLOY_ENVIRONMENT:'production',
     GITHUB_REPOSITORY:'fongap-labs/action-worker',
     CLOUDFLARE_API_TOKEN_SECONDARY:'synthetic-credential'};
-  for(const name of ['MCP_ADMIN_KEY','MCP_APPROVAL_KEY','MCP_COOKIE_KEY',
+  for(const name of ['MCP_ADMIN_KEY','MCP_APPROVAL_KEY','MCP_TOTP_SECRET','MCP_COOKIE_KEY',
     'MCP_KEYRING_JSON','MCP_INGEST_JWK','MCP_RUNTIME_KEY'])delete vars[name];
-  for(const name of ['MCP_ADMIN_KEY','MCP_APPROVAL_KEY','MCP_COOKIE_KEY',
+  for(const name of ['MCP_ADMIN_KEY','MCP_APPROVAL_KEY','MCP_TOTP_SECRET','MCP_COOKIE_KEY',
     'MCP_KEYRING_JSON','MCP_INGEST_JWK','MCP_RUNTIME_KEY']){
     const r=spawnSync('bash',[script.pathname],{env:{...vars,[name]:'synthetic-secret'},encoding:'utf8'});
     assert.equal(r.status,77,name);
@@ -131,7 +133,7 @@ test('central deploy removes credentials from npm child processes',async()=>{
   assert.match(script,/safe_env=\(env\)/);
   assert.match(script,/npm install --ignore-scripts/);
   assert.match(script,/npm run validate/);
-  for(const name of ['CLOUDFLARE_API_TOKEN_SECONDARY','MCP_ADMIN_KEY','MCP_APPROVAL_KEY',
+  for(const name of ['CLOUDFLARE_API_TOKEN_SECONDARY','MCP_ADMIN_KEY','MCP_APPROVAL_KEY','MCP_TOTP_SECRET',
     'MCP_COOKIE_KEY','MCP_KEYRING_JSON','MCP_INGEST_JWK','MCP_RUNTIME_KEY'])
     assert.match(script,new RegExp(name));
 });

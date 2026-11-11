@@ -32,7 +32,7 @@ delete env.CLOUDFLARE_API_KEY;
 delete env.CLOUDFLARE_EMAIL;
 // Worker runtime Secrets are managed in Cloudflare, not transferred by deployment.
 // Prevent accidental inheritance or emission by Wrangler subcommands.
-for (const name of ['MCP_ADMIN_KEY','MCP_APPROVAL_KEY','MCP_COOKIE_KEY','MCP_KEYRING_JSON','MCP_INGEST_JWK','MCP_RUNTIME_KEY']) delete env[name];
+for (const name of ['MCP_ADMIN_KEY','MCP_APPROVAL_KEY','MCP_TOTP_SECRET','MCP_COOKIE_KEY','MCP_KEYRING_JSON','MCP_INGEST_JWK','MCP_RUNTIME_KEY']) delete env[name];
 const result=spawnSync(process.execPath,[wrangler,...arguments_],{cwd:projectDir,env,stdio:'inherit',shell:false,windowsHide:true});
 if(result.error){
   console.error('Wrangler failed to launch ('+result.error.code+'). No credentials printed.');

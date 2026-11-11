@@ -7,6 +7,8 @@ import worker from '../src/index.ts';
 import {getSession} from '../src/admin.ts';
 import {ingestionPublicJwk} from '../src/crypto.ts';
 import {sha,b64} from '../src/util.ts';
+import {totpAt} from '../src/totp.ts';
+import {accessFixture,accessIssuer,accessAud} from './helpers/access.js';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 
 function d1(){
@@ -15,6 +17,7 @@ function d1(){
   sqlite.exec(readFileSync(new URL('../migrations/0002_refresh_token_rotation.sql',import.meta.url),'utf8'));
   sqlite.exec(readFileSync(new URL('../migrations/0003_resource_tool_policy.sql',import.meta.url),'utf8'));
   sqlite.exec(readFileSync(new URL('../migrations/0003_runner_registry_leases.sql',import.meta.url),'utf8'));
+  sqlite.exec(readFileSync(new URL('../migrations/0005_admin_totp.sql',import.meta.url),'utf8'));
   const db={
     prepare(sql){
       return {
@@ -40,16 +43,20 @@ async function hybrid(token,publicJwk){
   return{wrappedKey:b64(new Uint8Array(wrapped)),iv:b64(iv),ciphertext:b64(new Uint8Array(ciphertext))};
 }
 const origin='https://mcp.example';
-const req=(path,method='GET',body=null,headers={})=>new Request(origin+path,{method,headers,body});
+let accessAssertion='';
+const req=(path,method='GET',body=null,headers={})=>new Request(origin+path,{method,headers:{...headers,...(path.startsWith('/admin')||path.startsWith('/authorize')?{'Cf-Access-Jwt-Assertion':accessAssertion}:{})},body});
 const post=(path,body,cookie,csrf)=>req(path,'POST',JSON.stringify(body),{'Content-Type':'application/json',Origin:origin,Cookie:cookie||'','X-CSRF-Token':csrf||''});
 
 test('E2E: admin adds encrypted GitHub connection, approves client, OAuth PKCE, routes owner, revokes client',async()=>{
   const {db,sqlite}=d1();
   const rsa=await crypto.subtle.generateKey({name:'RSA-OAEP',modulusLength:2048,publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'},true,['encrypt','decrypt']);
   const secret=['github','pat','TEST_ONLY_CREDENTIAL_NEVER_ISSUED_BY_GITHUB_123456'].join('_');
-  const env={MCP_DB:db,MCP_PUBLIC_URL:origin,MCP_ADMIN_KEY:'a'.repeat(48),MCP_APPROVAL_KEY:'b'.repeat(48),MCP_COOKIE_KEY:'c'.repeat(48),MCP_KEYRING_JSON:JSON.stringify({v1:b64(crypto.getRandomValues(new Uint8Array(32)))}),MCP_ACTIVE_ID:'v1',MCP_INGEST_JWK:JSON.stringify(await crypto.subtle.exportKey('jwk',rsa.privateKey)),GMC_WRITE_MODE:'disabled',GMC_CONTENT_MODE:'disabled',MCP_OAUTH_TTL:'900'};
+  const auth=await accessFixture();accessAssertion=auth.assertion;
+  const realNow=Date.now;const frozenTime=realNow();Date.now=()=>frozenTime;
+  const env={MCP_DB:db,MCP_PUBLIC_URL:origin,MCP_ACCESS_ISSUER:accessIssuer,MCP_ACCESS_AUD:accessAud,MCP_TOTP_SECRET:('JBSWY3DP').repeat(4),MCP_COOKIE_KEY:'c'.repeat(48),MCP_KEYRING_JSON:JSON.stringify({v1:b64(crypto.getRandomValues(new Uint8Array(32)))}),MCP_ACTIVE_ID:'v1',MCP_INGEST_JWK:JSON.stringify(await crypto.subtle.exportKey('jwk',rsa.privateKey)),GMC_WRITE_MODE:'disabled',GMC_CONTENT_MODE:'disabled',MCP_OAUTH_TTL:'900'};
   const originalFetch=globalThis.fetch;let remoteCount=0;
   globalThis.fetch=async (url,options)=>{
+    if(new URL(url).origin===accessIssuer)return Response.json(auth.jwks);
     assert.equal(new URL(url).origin,'https://api.github.com');
     assert.equal(options.headers.Authorization,'Bearer '+secret);
     remoteCount++;
@@ -58,9 +65,14 @@ test('E2E: admin adds encrypted GitHub connection, approves client, OAuth PKCE, 
     return new Response(JSON.stringify(value||{message:'not found'}),{status:value?200:404,headers:{'Content-Type':'application/json'}});
   };
   try{
-    // Admin login (credentials only through the browser, never a MCP tool).
-    const login=await worker.fetch(req('/admin/login','POST',new URLSearchParams({key:env.MCP_ADMIN_KEY}).toString(),{'Content-Type':'application/x-www-form-urlencoded',Origin:origin}),env);
+    // The Access assertion alone is not enough: a one-time TOTP code is required.
+    assert.equal((await worker.fetch(new Request(origin+'/admin'),env)).status,403);
+    const step=Math.floor(Date.now()/30000);
+    const loginCode=await totpAt(env.MCP_TOTP_SECRET,step-1);
+    const login=await worker.fetch(req('/admin/login','POST',new URLSearchParams({totp_code:loginCode}).toString(),{'Content-Type':'application/x-www-form-urlencoded',Origin:origin}),env);
     assert.equal(login.status,303);
+    const repeated=await worker.fetch(req('/admin/login','POST',new URLSearchParams({totp_code:loginCode}).toString(),{'Content-Type':'application/x-www-form-urlencoded',Origin:origin}),env);
+    assert.equal(repeated.status,403,'TOTP must not be accepted twice');
     const cookie=login.headers.get('set-cookie').split(';')[0];
     const session=await getSession(req('/admin','GET',null,{Cookie:cookie}),env);
     const encrypted=await hybrid(secret,ingestionPublicJwk(env));
@@ -75,6 +87,7 @@ test('E2E: admin adds encrypted GitHub connection, approves client, OAuth PKCE, 
     const verifier='v'.repeat(48),challenge=await sha(verifier);
     const query=new URLSearchParams({response_type:'code',client_id,redirect_uri:'http://127.0.0.1:1234/callback',resource:origin,scope:'mcp:read',code_challenge:challenge,code_challenge_method:'S256',state:'test_state'});
     const denied=await worker.fetch(req('/authorize?'+query),env);assert.equal(denied.status,400);
+    assert.ok((await denied.text()).includes('客户端待批准'));
     const approved=await worker.fetch(post('/admin/api/client-approval',{clientId:client_id,approved:true,allowedOwners:['Acme'],allowedResources:['default','github'],allowedTools:['github:github_available_owners','github:github_get_repository','github:github_list_issues','github:github_get_issue','github:github_list_pull_requests','github:github_get_pull_request','github:github_read_file','github:github_create_issue','github:github_operation_status'],allowWrite:false},cookie,session.csrf),env);
     assert.equal(approved.status,200,await approved.clone().text());
     const authorize=await worker.fetch(req('/authorize?'+query),env);
@@ -82,7 +95,7 @@ test('E2E: admin adds encrypted GitHub connection, approves client, OAuth PKCE, 
     const authCookie=authorize.headers.get('set-cookie').split(';')[0];
     const page=await authorize.text();assert.ok(!page.includes(secret));
     const id=page.match(/name="request_id" value="([A-Za-z0-9_-]+)"/)[1];
-    const accepted=await worker.fetch(req('/authorize','POST',new URLSearchParams({request_id:id,approval_key:env.MCP_APPROVAL_KEY}).toString(),{'Content-Type':'application/x-www-form-urlencoded',Origin:origin,Cookie:authCookie}),env);
+    const accepted=await worker.fetch(req('/authorize','POST',new URLSearchParams({request_id:id,totp_code:await totpAt(env.MCP_TOTP_SECRET,step)}).toString(),{'Content-Type':'application/x-www-form-urlencoded',Origin:origin,Cookie:authCookie}),env);
     assert.equal(accepted.status,302);
     const redirect=new URL(accepted.headers.get('Location'));
     assert.equal(redirect.searchParams.get('state'),'test_state');
@@ -107,7 +120,7 @@ test('E2E: admin adds encrypted GitHub connection, approves client, OAuth PKCE, 
     assert.equal(githubPage.status,200);
     const githubCookie=githubPage.headers.get('set-cookie').split(';')[0];
     const githubRequestId=(await githubPage.text()).match(/name="request_id" value="([A-Za-z0-9_-]+)"/)[1];
-    const githubAccepted=await worker.fetch(req('/authorize','POST',new URLSearchParams({request_id:githubRequestId,approval_key:env.MCP_APPROVAL_KEY}).toString(),{'Content-Type':'application/x-www-form-urlencoded',Origin:origin,Cookie:githubCookie}),env);
+    const githubAccepted=await worker.fetch(req('/authorize','POST',new URLSearchParams({request_id:githubRequestId,totp_code:await totpAt(env.MCP_TOTP_SECRET,step+1)}).toString(),{'Content-Type':'application/x-www-form-urlencoded',Origin:origin,Cookie:githubCookie}),env);
     assert.equal(githubAccepted.status,302);
     const githubCode=new URL(githubAccepted.headers.get('Location')).searchParams.get('code');
     const githubTokenForm=new URLSearchParams({grant_type:'authorization_code',code:githubCode,redirect_uri:'http://127.0.0.1:1234/callback',client_id,code_verifier:verifier,resource:origin+'/github'});
@@ -145,5 +158,5 @@ test('E2E: admin adds encrypted GitHub connection, approves client, OAuth PKCE, 
     const revoke=await worker.fetch(post('/admin/api/client-approval',{clientId:client_id,approved:false},cookie,session.csrf),env);assert.equal(revoke.status,200);
     const forbidden=await worker.fetch(getRepo('Acme',4),env);assert.equal(forbidden.status,401);
     assert.equal(remoteCount,4);
-  }finally{globalThis.fetch=originalFetch;sqlite.close();}
+  }finally{globalThis.fetch=originalFetch;Date.now=realNow;accessAssertion='';sqlite.close();}
 });

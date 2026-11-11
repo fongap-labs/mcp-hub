@@ -1,5 +1,7 @@
 # 服务迁移与部署安全
 
+> **2026-11-11 认证更新**：本页涉及 `MCP_ADMIN_KEY`、`MCP_APPROVAL_KEY` 的部分仅记录旧版本迁移状态。当前新版本改为 Cloudflare Access + 验证器 6 位 TOTP；生产上线前置条件和 Secret 见 [中央部署操作](CENTRAL_DEPLOY.md)。请勿依本页旧认证密钥清单配置新版本。
+
 ## 1. 目标身份
 
 仓库、服务与数据库必须分别确认。
