@@ -67,16 +67,46 @@ test('MCP refuses tool operations on unapproved owner, even when a client has re
   const body=await result.json();assert.equal(body.result.isError,true);assert.match(body.result.content[0].text,/not authorized/);
 });
 
-test('Admin session signed with HMAC is not forgeable',async()=>{
-  const env={MCP_ADMIN_KEY:'A'.repeat(48),MCP_COOKIE_KEY:'B'.repeat(48),MCP_DB:{prepare(){return{bind(){return{first:async()=>({hits:1})}}}}}};
+test('Admin requires a valid Access identity and a single-use TOTP',async()=>{
+  const {accessFixture,accessIssuer,accessAud}=await import('./helpers/access.js');
+  const {totpAt}=await import('../src/totp.ts');
+  const {webcrypto}=await import('node:crypto');
+  if(!globalThis.crypto)globalThis.crypto=webcrypto;
+  const {DatabaseSync}=await import('node:sqlite');
+  const sql=new DatabaseSync(':memory:');
+  const {readFileSync}=await import('node:fs');
+  sql.exec(readFileSync(new URL('../migrations/0001_init.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../migrations/0005_admin_totp.sql',import.meta.url),'utf8'));
+  const db={prepare(query){return{bind(...args){return{
+    first:async()=>sql.prepare(query).get(...args)||null
+  }}}}};
+  const auth=await accessFixture();
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async u=>{
+    assert.equal(new URL(u).origin,accessIssuer);
+    return Response.json(auth.jwks);
+  };
+  const env={MCP_ACCESS_ISSUER:accessIssuer,MCP_ACCESS_AUD:accessAud,
+    MCP_TOTP_SECRET:('JBSWY3DP').repeat(4),
+    MCP_COOKIE_KEY:'B'.repeat(48),MCP_DB:db};
   const origin='https://mcp.example';
-  const login=await adminLogin(new Request(origin+'/admin/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({key:env.MCP_ADMIN_KEY}).toString()}),env);
-  assert.equal(login.status,303);
-  const value=login.headers.get('Set-Cookie').split(';')[0];
-  const ok=await getSession(new Request(origin+'/admin',{headers:{Cookie:value}}),env);
-  assert.ok(ok?.csrf);
-  const tampered=value.slice(0,-1)+(value.endsWith('a')?'b':'a');
-  assert.equal(await getSession(new Request(origin+'/admin',{headers:{Cookie:tampered}}),env,MCP_SERVERS[0]),null);
+  try {
+    const code=await totpAt(env.MCP_TOTP_SECRET,Math.floor(Date.now()/30000));
+    const body=new URLSearchParams({totp_code:code}).toString();
+    const request=(assertion)=>new Request(origin+'/admin/login',{method:'POST',headers:{
+      Origin:origin,'Content-Type':'application/x-www-form-urlencoded',...(assertion?{'Cf-Access-Jwt-Assertion':assertion}:{})
+    },body});
+    assert.equal((await adminLogin(request(''),env)).status,403,'Missing Access assertion');
+    const login=await adminLogin(request(auth.assertion),env);
+    assert.equal(login.status,303);
+    assert.equal((await adminLogin(request(auth.assertion),env)).status,403,'One-time code cannot be reused');
+    const value=login.headers.get('Set-Cookie').split(';')[0];
+    const ok=await getSession(new Request(origin+'/admin',{headers:{Cookie:value,'Cf-Access-Jwt-Assertion':auth.assertion}}),env);
+    assert.ok(ok?.csrf);
+    assert.equal(await getSession(new Request(origin+'/admin',{headers:{Cookie:value}}),env),null,'Access must remain valid');
+    const tampered=value.slice(0,-1)+(value.endsWith('a')?'b':'a');
+    assert.equal(await getSession(new Request(origin+'/admin',{headers:{Cookie:tampered,'Cf-Access-Jwt-Assertion':auth.assertion}}),env),null);
+  } finally {globalThis.fetch=originalFetch;sql.close();}
 });
 
 test('OAuth token denied immediately after client revocation, or audience mismatch',async()=>{

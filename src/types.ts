@@ -72,8 +72,9 @@ export interface Env {
   GMC_CONTENT_MODE?: 'disabled' | 'enabled';
   MCP_OAUTH_TTL?: string;
   MCP_BUILD_SHA?: string;
-  MCP_ADMIN_KEY: string;
-  MCP_APPROVAL_KEY: string;
+  MCP_ACCESS_ISSUER: string;
+  MCP_ACCESS_AUD: string;
+  MCP_TOTP_SECRET: string;
   MCP_COOKIE_KEY: string;
   MCP_KEYRING_JSON: string;
   MCP_ACTIVE_ID: string;

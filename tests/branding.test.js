@@ -5,8 +5,10 @@ import worker from '../src/index.ts';
 import {BRAND_ICON,BRAND_NAME,BRAND_NOTE,BRAND_SOURCE,BRAND_VERSION} from '../src/brand.ts';
 import {processMcp} from '../src/mcp.ts';
 import {MCP_SERVERS} from '../src/mcp-registry.ts';
+import {accessFixture,accessIssuer,accessAud} from './helpers/access.js';
 
 const origin='https://test.example';
+const brandedAccess=accessFixture();
 test('independent mark and administration UI cannot be confused with official GitHub MCP',async()=>{
   assert.equal(BRAND_NAME,'MCP Hub');
   assert.equal(BRAND_SOURCE,'Fongap Labs');
@@ -17,16 +19,27 @@ test('independent mark and administration UI cannot be confused with official Gi
   assert.equal(icon.status,200);
   assert.match(icon.headers.get('Content-Type'),/image\/svg\+xml/);
   assert.match(await icon.text(),/MCP Hub independent mark/);
-  const login=await worker.fetch(new Request(origin+'/admin'),{});
-  assert.equal(login.status,200);
-  const html=await login.text();
-  assert.match(html,/MCP Hub/);
-  assert.ok(html.includes(GATEWAY_DISCLAIMER));
-  assert.match(html,/Fongap Labs/);
-  assert.match(html,/v0\.1\.0/);
-  assert.match(html,/\/brand\/icon.svg/);
-  assert.doesNotMatch(html,/<h1>GitHub MCP/);
-  assert.ok(BRAND_NOTE.includes(GATEWAY_DISCLAIMER));
+  const denied=await worker.fetch(new Request(origin+'/admin'),{});
+  assert.equal(denied.status,403,'Admin UI requires a verified Access identity');
+  const auth=await brandedAccess;
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async url=>{
+    assert.equal(url,accessIssuer+'/cdn-cgi/access/certs');
+    return Response.json(auth.jwks);
+  };
+  try {
+    const env={MCP_ACCESS_ISSUER:accessIssuer,MCP_ACCESS_AUD:accessAud};
+    const login=await worker.fetch(new Request(origin+'/admin',{headers:{'Cf-Access-Jwt-Assertion':auth.assertion}}),env);
+    assert.equal(login.status,200);
+    const html=await login.text();
+    assert.match(html,/MCP Hub/);
+    assert.ok(html.includes(GATEWAY_DISCLAIMER));
+    assert.match(html,/Fongap Labs/);
+    assert.match(html,/v0\.1\.0/);
+    assert.match(html,/\/brand\/icon.svg/);
+    assert.doesNotMatch(html,/<h1>GitHub MCP/);
+    assert.ok(BRAND_NOTE.includes(GATEWAY_DISCLAIMER));
+  } finally {globalThis.fetch=originalFetch;}
 });
 
 test('MCP initialize identifies an independent gateway, not the official server',async()=>{
@@ -41,10 +54,20 @@ test('MCP initialize identifies an independent gateway, not the official server'
   assert.notEqual(payload.result.serverInfo.name,'github-mcp-server');
 });
 
-test('Admin browser script preserves public /admin/app.js path after TypeScript migration', async () => {
-  const { default: worker } = await import('../src/index.ts');
-  const response = await worker.fetch(new Request('https://example.com/admin/app.js'), {});
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get('Content-Type'), /javascript/);
-  assert.ok((await response.text()).includes('crypto.subtle'));
+test('Admin browser script remains served after Access validation', async () => {
+  const blocked=await worker.fetch(new Request(origin+'/admin/app.js'),{});
+  assert.equal(blocked.status,403);
+  const auth=await brandedAccess;
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async url=>{
+    assert.equal(url,accessIssuer+'/cdn-cgi/access/certs');
+    return Response.json(auth.jwks);
+  };
+  try {
+    const response=await worker.fetch(new Request(origin+'/admin/app.js',{headers:{'Cf-Access-Jwt-Assertion':auth.assertion}}),
+      {MCP_ACCESS_ISSUER:accessIssuer,MCP_ACCESS_AUD:accessAud});
+    assert.equal(response.status,200);
+    assert.match(response.headers.get('Content-Type'),/javascript/);
+    assert.ok((await response.text()).includes('crypto.subtle'));
+  } finally {globalThis.fetch=originalFetch;}
 });

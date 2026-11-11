@@ -5,6 +5,7 @@ import {renderOAuthForm,OAUTH_TITLE,OAUTH_DENIED_TITLE,OAUTH_DENIED_BODY} from '
 import {now,json,html,escapeHtml,randomId,sha,equals,cookie,originOk,form,bodyJson} from './util.ts';
 import {issueAuthorizationTokens,rotateRefreshToken,revokeOAuthToken,cleanOAuthGrants} from './tokens.ts';
 import {BRAND_NAME,BRAND_HEAD,BRAND_HEADER} from './brand.ts';
+import {verifyTotp} from './totp.ts';
 
 const SCOPES=['mcp:read','mcp:write'];
 const BIND='__Host-mcp-auth-binding';
@@ -58,7 +59,8 @@ export async function authorizeGet(request: Request,env: Env): Promise<Response>
   const u=new URL(request.url);const p=u.searchParams;
   const clientId=p.get('client_id')||'';const redirectUri=p.get('redirect_uri')||'';
   const client=await env.MCP_DB.prepare('SELECT client_name,redirect_uris,approved,allowed_owners,allow_write,allowed_resources,allowed_tools,auth_version FROM oauth_clients WHERE client_id=?').bind(clientId).first();
-  if(!client||!client.approved|| !JSON.parse(client.redirect_uris).includes(redirectUri) || !validRedirect(redirectUri)) return errorPage();
+  if(!client || !JSON.parse(client.redirect_uris).includes(redirectUri) || !validRedirect(redirectUri)) return errorPage();
+  if(!client.approved) return html(page('客户端待批准', '<p>此 MCP 客户端尚未获得管理员批准。</p><p>请打开 <a href="/admin">管理后台</a>，在“授权 MCP 客户端”中批准该客户端，并选择对应的 GitHub Owner、Resource 和工具。保存后重新连接。</p>'),400);
   const state=p.get('state')||'';const codeChallenge=p.get('code_challenge')||'';
   const asked=(p.get('scope')||'mcp:read').trim().split(/\s+/);
   const requestedResource=p.get('resource') ?? '';
@@ -81,7 +83,7 @@ export async function authorizePost(request: Request,env: Env): Promise<Response
   const id=p.get('request_id')||''; if(!b64urlRe.test(id))return errorPage();
   const row=await env.MCP_DB.prepare('SELECT * FROM oauth_auth_requests WHERE id_hash=?').bind(await sha(id)).first();
   if(!row||row.expires_at<=now()||!(await equals(row.cookie_hash,await sha(cookie(request,BIND)))))return errorPage();
-  if(!env.MCP_APPROVAL_KEY||!(await equals(p.get('approval_key')||'',env.MCP_APPROVAL_KEY)))return html(page(OAUTH_DENIED_TITLE,OAUTH_DENIED_BODY),403);
+  if(!(await verifyTotp(env,request,p.get('totp_code')||'')))return html(page(OAUTH_DENIED_TITLE,OAUTH_DENIED_BODY),403);
   const consumed=await env.MCP_DB.prepare('DELETE FROM oauth_auth_requests WHERE id_hash=? RETURNING id_hash').bind(await sha(id)).first(); if(!consumed)return errorPage();
   const scopes=['mcp:read']; const client=await env.MCP_DB.prepare('SELECT approved,allow_write,auth_version FROM oauth_clients WHERE client_id=?').bind(row.client_id).first();
   if(!client?.approved||client.auth_version!==row.auth_version)return errorPage();

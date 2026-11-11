@@ -7,11 +7,13 @@ import worker from '../src/index.ts';
 import {acquireRunnerLease,provisionRunner,releaseRunnerLease,renewRunnerLease} from '../src/control/runner-registry.ts';
 import {getSession} from '../src/admin.ts';
 import {now} from '../src/util.ts';
+import {totpAt} from '../src/totp.ts';
+import {accessFixture,accessIssuer,accessAud} from './helpers/access.js';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 
 function d1(){
   const sqlite=new DatabaseSync(':memory:');
-  for(const path of ['0001_init.sql','0002_refresh_token_rotation.sql','0003_resource_tool_policy.sql','0003_runner_registry_leases.sql','0004_runner_dispatch.sql'])
+  for(const path of ['0001_init.sql','0002_refresh_token_rotation.sql','0003_resource_tool_policy.sql','0003_runner_registry_leases.sql','0004_runner_dispatch.sql','0005_admin_totp.sql'])
     sqlite.exec(readFileSync(new URL('../migrations/'+path,import.meta.url),'utf8'));
   const db={prepare(sql){
     const statement=args=>({
@@ -77,25 +79,50 @@ test('Runner lease claims are capacity-bounded, idempotent and retained after re
 });
 
 test('revoking a Runner invalidates its credential and releases its lease',async()=>{
-  const {db,sqlite}=d1();const env={MCP_DB:db,MCP_ADMIN_KEY:'k'.repeat(48),MCP_COOKIE_KEY:'c'.repeat(48)};
-  const login=await worker.fetch(new Request(origin+'/admin/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({key:env.MCP_ADMIN_KEY}).toString()}),env);
-  assert.equal(login.status,303);
-  const cookie=login.headers.get('set-cookie').split(';')[0];
-  const session=await getSession(new Request(origin+'/admin',{headers:{Cookie:cookie}}),env);
-  assert.ok(session);
-  const adminPost=(path,body)=>worker.fetch(new Request(origin+path,{method:'POST',headers:{Origin:origin,Cookie:cookie,'X-CSRF-Token':session.csrf,'Content-Type':'application/json'},body:JSON.stringify(body)}),env);
-  const page=await worker.fetch(new Request(origin+'/admin',{headers:{Cookie:cookie}}),env);
-  assert.match(await page.text(),/runner-add/);
-  const provisionResponse=await adminPost('/admin/api/runners/provision',{displayName:'Revoked',capabilities:['coding.patch'],maxConcurrency:1});
-  assert.equal(provisionResponse.status,201,await provisionResponse.clone().text());
-  const provisioned=await provisionResponse.json();
-  assert.ok(provisioned.token);
-  const stored=sqlite.prepare('SELECT * FROM runner_credentials WHERE runner_id=?').get(provisioned.runnerId);
-  assert.ok(!JSON.stringify(stored).includes(provisioned.token));
-  await worker.fetch(request('/runner/register',{protocolVersion:'v1',displayName:'Revoked',capabilities:['coding.patch'],maxConcurrency:1},provisioned.token),env);
-  await worker.fetch(request('/runner/heartbeat',{protocolVersion:'v1',sequence:1,activeConcurrency:0},provisioned.token),env);
-  const lease=await acquireRunnerLease(env,{runnerId:provisioned.runnerId,idempotencyKey:'revoke-me',resourceKey:'workspace:c',ttlSeconds:60});
-  assert.equal((await adminPost('/admin/api/runners/revoke',{runnerId:provisioned.runnerId})).status,200);
-  assert.equal((await worker.fetch(request('/runner/heartbeat',{protocolVersion:'v1',sequence:2,activeConcurrency:0},provisioned.token),env)).status,401);
-  assert.ok(sqlite.prepare('SELECT released_at FROM runner_leases WHERE lease_id=?').get(lease.leaseId).released_at);
+  const {db,sqlite}=d1();
+  const auth=await accessFixture();
+  const env={
+    MCP_DB:db,
+    MCP_ACCESS_ISSUER:accessIssuer,
+    MCP_ACCESS_AUD:accessAud,
+    MCP_TOTP_SECRET:'JBSWY3DP'.repeat(4),
+    MCP_COOKIE_KEY:'c'.repeat(48),
+  };
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async url=>{
+    assert.equal(url,accessIssuer+'/cdn-cgi/access/certs');
+    return Response.json(auth.jwks);
+  };
+  const accessHeaders={'Cf-Access-Jwt-Assertion':auth.assertion};
+  try {
+    const code=await totpAt(env.MCP_TOTP_SECRET,Math.floor(Date.now()/30000));
+    const login=await worker.fetch(new Request(origin+'/admin/login',{
+      method:'POST',
+      headers:{Origin:origin,'Content-Type':'application/x-www-form-urlencoded',...accessHeaders},
+      body:new URLSearchParams({totp_code:code}).toString(),
+    }),env);
+    assert.equal(login.status,303);
+    const cookie=login.headers.get('set-cookie').split(';')[0];
+    const session=await getSession(new Request(origin+'/admin',{headers:{Cookie:cookie,...accessHeaders}}),env);
+    assert.ok(session);
+    const adminPost=(path,body)=>worker.fetch(new Request(origin+path,{
+      method:'POST',
+      headers:{Origin:origin,Cookie:cookie,'X-CSRF-Token':session.csrf,'Content-Type':'application/json',...accessHeaders},
+      body:JSON.stringify(body),
+    }),env);
+    const page=await worker.fetch(new Request(origin+'/admin',{headers:{Cookie:cookie,...accessHeaders}}),env);
+    assert.match(await page.text(),/runner-add/);
+    const provisionResponse=await adminPost('/admin/api/runners/provision',{displayName:'Revoked',capabilities:['coding.patch'],maxConcurrency:1});
+    assert.equal(provisionResponse.status,201,await provisionResponse.clone().text());
+    const provisioned=await provisionResponse.json();
+    assert.ok(provisioned.token);
+    const stored=sqlite.prepare('SELECT * FROM runner_credentials WHERE runner_id=?').get(provisioned.runnerId);
+    assert.ok(!JSON.stringify(stored).includes(provisioned.token));
+    await worker.fetch(request('/runner/register',{protocolVersion:'v1',displayName:'Revoked',capabilities:['coding.patch'],maxConcurrency:1},provisioned.token),env);
+    await worker.fetch(request('/runner/heartbeat',{protocolVersion:'v1',sequence:1,activeConcurrency:0},provisioned.token),env);
+    const lease=await acquireRunnerLease(env,{runnerId:provisioned.runnerId,idempotencyKey:'revoke-me',resourceKey:'workspace:c',ttlSeconds:60});
+    assert.equal((await adminPost('/admin/api/runners/revoke',{runnerId:provisioned.runnerId})).status,200);
+    assert.equal((await worker.fetch(request('/runner/heartbeat',{protocolVersion:'v1',sequence:2,activeConcurrency:0},provisioned.token),env)).status,401);
+    assert.ok(sqlite.prepare('SELECT released_at FROM runner_leases WHERE lease_id=?').get(lease.leaseId).released_at);
+  } finally {globalThis.fetch=originalFetch;sqlite.close();}
 });

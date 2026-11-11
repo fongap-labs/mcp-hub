@@ -24,7 +24,7 @@ if [[ -z "${CLOUDFLARE_API_TOKEN_SECONDARY:-}" ]]; then
 fi
 # Runtime Worker Secrets stay in Cloudflare. Fail closed if credentials from another
 # environment were inadvertently inherited by the deployment job.
-for name in MCP_ADMIN_KEY MCP_APPROVAL_KEY MCP_COOKIE_KEY MCP_KEYRING_JSON MCP_INGEST_JWK MCP_RUNTIME_KEY; do
+for name in MCP_ADMIN_KEY MCP_APPROVAL_KEY MCP_TOTP_SECRET MCP_COOKIE_KEY MCP_KEYRING_JSON MCP_INGEST_JWK MCP_RUNTIME_KEY; do
   if [[ -n "${!name:-}" ]]; then
     echo "::error::Worker runtime Secret must not be passed to deployment: $name." >&2
     exit 77
@@ -32,7 +32,7 @@ for name in MCP_ADMIN_KEY MCP_APPROVAL_KEY MCP_COOKIE_KEY MCP_KEYRING_JSON MCP_I
 done
 # Keep deployment credentials and inherited runtime credentials out of tests.
 safe_env=(env)
-for name in CLOUDFLARE_API_TOKEN_SECONDARY MCP_ADMIN_KEY MCP_APPROVAL_KEY MCP_COOKIE_KEY MCP_KEYRING_JSON MCP_INGEST_JWK MCP_RUNTIME_KEY; do
+for name in CLOUDFLARE_API_TOKEN_SECONDARY MCP_ADMIN_KEY MCP_APPROVAL_KEY MCP_TOTP_SECRET MCP_COOKIE_KEY MCP_KEYRING_JSON MCP_INGEST_JWK MCP_RUNTIME_KEY; do
   safe_env+=("-u" "$name")
 done
 "${safe_env[@]}" npm install --ignore-scripts --no-audit --no-fund

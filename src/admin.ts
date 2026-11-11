@@ -5,6 +5,8 @@ import {apiFetch,githubPath,getOwnerToken,PublicError} from './github.ts';
 import {ADMIN_SCRIPT,ADMIN_CSS} from './admin-ui.ts';
 import {BRAND_NAME,BRAND_HEAD,BRAND_HEADER} from './brand.ts';
 import {rateLimit} from './oauth.ts';
+import {accessIdentity} from './access.ts';
+import {verifyTotp} from './totp.ts';
 import {revokeClientTokens} from './tokens.ts';
 import {renderAdminLogin,renderAdminDocument,renderClientRow,renderPendingRow,renderConnectionRow,renderRunnerSection} from './i18n/zh-CN.ts';
 import {adminProvisionRunner,adminRevokeRunner,listRunners} from './control/runner-registry.ts';
@@ -28,8 +30,10 @@ export async function getSession(request: Request,env: Env): Promise<AdminSessio
   try {
     const [body,signature,extra]=(cookie(request,COOKIE)||'').split('.');if(!body||!signature||extra)return null;
     const decoded=JSON.parse(new TextDecoder().decode(unb64u(body))) as unknown;
-    if(!decoded || typeof decoded!=='object' || !('exp' in decoded) || !('csrf' in decoded) || typeof decoded.exp!=='number')return null;
-    if(!decoded.exp||decoded.exp<=now()||typeof decoded.csrf!=='string'||decoded.csrf.length!==43)return null;
+    const accessSubject=await accessIdentity(request,env);
+    if(!accessSubject)return null;
+    if(!decoded || typeof decoded!=='object' || !('exp' in decoded) || !('csrf' in decoded) || !('sub' in decoded) || typeof decoded.exp!=='number')return null;
+    if(!decoded.exp||decoded.exp<=now()||typeof decoded.csrf!=='string'||decoded.csrf.length!==43||decoded.sub!==accessSubject)return null;
     if(!(await equals(await sign(env,body),signature)))return null;
     return {exp: decoded.exp, csrf: decoded.csrf};
   }catch{return null;}
@@ -38,9 +42,11 @@ function redirect(path: string,headers: Record<string, string>={}){return new Re
 export async function adminLogin(request: Request,env: Env): Promise<Response> {
   if(!originOk(request))return json({error:'Forbidden'},403);
   if(!(await rateLimit(env,request,'admin-login',15)))return json({error:'Rate limited'},429);
-  const p=await form(request);const proposed=p.get('key')||'';
-  if(!env.MCP_ADMIN_KEY||env.MCP_ADMIN_KEY.length<32||!(await equals(proposed,env.MCP_ADMIN_KEY)))return html('<p>Invalid credentials.</p>',403);
-  const data={exp:now()+1800,csrf:randomId()};const body=b64u(encoder.encode(JSON.stringify(data)));const value=body+'.'+await sign(env,body);
+  const subject=await accessIdentity(request,env);
+  if(!subject)return json({error:'Cloudflare Access required'},403);
+  const p=await form(request);
+  if(!(await verifyTotp(env,request,p.get('totp_code')||'')))return html('<p>动态验证码错误、过期或已使用。</p>',403);
+  const data={exp:now()+1800,csrf:randomId(),sub:subject};const body=b64u(encoder.encode(JSON.stringify(data)));const value=body+'.'+await sign(env,body);
   return redirect('/admin',{'Set-Cookie':`${COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=1800`});
 }
 export async function adminPage(request: Request,env: Env): Promise<Response> {
