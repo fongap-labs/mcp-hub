@@ -8,6 +8,7 @@ import {MCP_SERVERS} from '../src/mcp-registry.ts';
 import {accessFixture,accessIssuer,accessAud} from './helpers/access.js';
 
 const origin='https://test.example';
+const brandedAccess=accessFixture();
 test('independent mark and administration UI cannot be confused with official GitHub MCP',async()=>{
   assert.equal(BRAND_NAME,'MCP Hub');
   assert.equal(BRAND_SOURCE,'Fongap Labs');
@@ -20,7 +21,7 @@ test('independent mark and administration UI cannot be confused with official Gi
   assert.match(await icon.text(),/MCP Hub independent mark/);
   const denied=await worker.fetch(new Request(origin+'/admin'),{});
   assert.equal(denied.status,403,'Admin UI requires a verified Access identity');
-  const auth=await accessFixture();
+  const auth=await brandedAccess;
   const originalFetch=globalThis.fetch;
   globalThis.fetch=async url=>{
     assert.equal(url,accessIssuer+'/cdn-cgi/access/certs');
@@ -56,7 +57,7 @@ test('MCP initialize identifies an independent gateway, not the official server'
 test('Admin browser script remains served after Access validation', async () => {
   const blocked=await worker.fetch(new Request(origin+'/admin/app.js'),{});
   assert.equal(blocked.status,403);
-  const auth=await accessFixture();
+  const auth=await brandedAccess;
   const originalFetch=globalThis.fetch;
   globalThis.fetch=async url=>{
     assert.equal(url,accessIssuer+'/cdn-cgi/access/certs');
