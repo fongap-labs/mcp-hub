@@ -3,8 +3,9 @@ import {unb64u} from './util.ts';
 
 interface AccessClaims { iss?: string; aud?: string|string[]; exp?: number; nbf?: number; sub?: string; email?: string; }
 interface JwtHeader { alg?: string; kid?: string; }
-interface JwkSet { keys?: JsonWebKey[]; }
-const cache = new Map<string,{expires:number;keys:JsonWebKey[]}>();
+type AccessJwk = JsonWebKey & { kid?: string };
+interface JwkSet { keys?: AccessJwk[]; }
+const cache = new Map<string,{expires:number;keys:AccessJwk[]}>();
 
 function accessConfig(env: Env): {issuer:string;audiences:string[]} | null {
   const issuer=(env.MCP_ACCESS_ISSUER||'').replace(/\/$/,'');
@@ -13,7 +14,7 @@ function accessConfig(env: Env): {issuer:string;audiences:string[]} | null {
   return {issuer,audiences};
 }
 
-async function loadKeys(issuer: string): Promise<JsonWebKey[]> {
+async function loadKeys(issuer: string): Promise<AccessJwk[]> {
   const existing=cache.get(issuer);
   if (existing && existing.expires>Date.now()) return existing.keys;
   const response=await fetch(issuer+'/cdn-cgi/access/certs',{redirect:'error',signal:AbortSignal.timeout(5000)});
