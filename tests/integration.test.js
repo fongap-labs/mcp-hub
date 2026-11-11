@@ -75,6 +75,7 @@ test('E2E: admin adds encrypted GitHub connection, approves client, OAuth PKCE, 
     const verifier='v'.repeat(48),challenge=await sha(verifier);
     const query=new URLSearchParams({response_type:'code',client_id,redirect_uri:'http://127.0.0.1:1234/callback',resource:origin,scope:'mcp:read',code_challenge:challenge,code_challenge_method:'S256',state:'test_state'});
     const denied=await worker.fetch(req('/authorize?'+query),env);assert.equal(denied.status,400);
+    assert.match(await denied.text(),/客户端待批准/);
     const approved=await worker.fetch(post('/admin/api/client-approval',{clientId:client_id,approved:true,allowedOwners:['Acme'],allowedResources:['default','github'],allowedTools:['github:github_available_owners','github:github_get_repository','github:github_list_issues','github:github_get_issue','github:github_list_pull_requests','github:github_get_pull_request','github:github_read_file','github:github_create_issue','github:github_operation_status'],allowWrite:false},cookie,session.csrf),env);
     assert.equal(approved.status,200,await approved.clone().text());
     const authorize=await worker.fetch(req('/authorize?'+query),env);
