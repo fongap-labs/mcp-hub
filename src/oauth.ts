@@ -58,7 +58,8 @@ export async function authorizeGet(request: Request,env: Env): Promise<Response>
   const u=new URL(request.url);const p=u.searchParams;
   const clientId=p.get('client_id')||'';const redirectUri=p.get('redirect_uri')||'';
   const client=await env.MCP_DB.prepare('SELECT client_name,redirect_uris,approved,allowed_owners,allow_write,allowed_resources,allowed_tools,auth_version FROM oauth_clients WHERE client_id=?').bind(clientId).first();
-  if(!client||!client.approved|| !JSON.parse(client.redirect_uris).includes(redirectUri) || !validRedirect(redirectUri)) return errorPage();
+  if(!client || !JSON.parse(client.redirect_uris).includes(redirectUri) || !validRedirect(redirectUri)) return errorPage();
+  if(!client.approved) return html(page('客户端待批准', '<p>此 MCP 客户端尚未获得管理员批准。</p><p>请打开 <a href="/admin">管理后台</a>，在“授权 MCP 客户端”中批准该客户端，并选择对应的 GitHub Owner、Resource 和工具。保存后重新连接。</p>'),400);
   const state=p.get('state')||'';const codeChallenge=p.get('code_challenge')||'';
   const asked=(p.get('scope')||'mcp:read').trim().split(/\s+/);
   const requestedResource=p.get('resource') ?? '';
