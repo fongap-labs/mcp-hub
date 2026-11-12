@@ -6,6 +6,8 @@ import {now,json,html,escapeHtml,randomId,sha,equals,cookie,originOk,form,bodyJs
 import {issueAuthorizationTokens,rotateRefreshToken,revokeOAuthToken,cleanOAuthGrants} from './tokens.ts';
 import {BRAND_NAME,BRAND_HEAD,BRAND_HEADER} from './brand.ts';
 import {verifyTotp} from './totp.ts';
+import {cloudflareMfaOnly} from './auth-mode.ts';
+import {accessIdentity} from './access.ts';
 
 const SCOPES=['mcp:read','mcp:write'];
 const BIND='__Host-mcp-auth-binding';
@@ -73,7 +75,7 @@ export async function authorizeGet(request: Request,env: Env): Promise<Response>
     if(!tool.startsWith(toolPrefix))return [];
     try{return [decodeURIComponent(tool.slice(toolPrefix.length))];}catch{return [];}
   });
-  const body=renderOAuthForm({escapeHtml,client,redirectUri,allowedOwners:JSON.parse(client.allowed_owners),id,allowWrite:asked.includes('mcp:write'),server,grantedTools});
+  const body=renderOAuthForm({escapeHtml,client,redirectUri,allowedOwners:JSON.parse(client.allowed_owners),id,allowWrite:asked.includes('mcp:write'),server,grantedTools,requireTotp:!cloudflareMfaOnly(env)});
   return html(page(OAUTH_TITLE,body),200,{'Set-Cookie':`${BIND}=${bind}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`});
 }
 export async function authorizePost(request: Request,env: Env): Promise<Response> {
@@ -83,7 +85,13 @@ export async function authorizePost(request: Request,env: Env): Promise<Response
   const id=p.get('request_id')||''; if(!b64urlRe.test(id))return errorPage();
   const row=await env.MCP_DB.prepare('SELECT * FROM oauth_auth_requests WHERE id_hash=?').bind(await sha(id)).first();
   if(!row||row.expires_at<=now()||!(await equals(row.cookie_hash,await sha(cookie(request,BIND)))))return errorPage();
-  if(!(await verifyTotp(env,request,p.get('totp_code')||'')))return html(page(OAUTH_DENIED_TITLE,OAUTH_DENIED_BODY),403);
+  if(cloudflareMfaOnly(env)){
+    // The index route also enforces Access; check again here to avoid a
+    // direct-call bypass in any future route refactor.
+    if(!(await accessIdentity(request,env)))return html(page(OAUTH_DENIED_TITLE,OAUTH_DENIED_BODY),403);
+  }else if(!(await verifyTotp(env,request,p.get('totp_code')||''))){
+    return html(page(OAUTH_DENIED_TITLE,OAUTH_DENIED_BODY),403);
+  }
   const consumed=await env.MCP_DB.prepare('DELETE FROM oauth_auth_requests WHERE id_hash=? RETURNING id_hash').bind(await sha(id)).first(); if(!consumed)return errorPage();
   const scopes=['mcp:read']; const client=await env.MCP_DB.prepare('SELECT approved,allow_write,auth_version FROM oauth_clients WHERE client_id=?').bind(row.client_id).first();
   if(!client?.approved||client.auth_version!==row.auth_version)return errorPage();
