@@ -1,18 +1,18 @@
 # MCP Hub（Cloudflare Workers）
 
-> **来源：Fongap Labs · 版本：v0.1.0 · 独立项目，非 GitHub 官方 MCP Server。** 此服务是面向多个 GitHub 用户／组织的第三方连接网关，与 GitHub, Inc. 及其官方 [github/github-mcp-server](https://github.com/github/github-mcp-server) 项目不存在从属、认证或背书关系。客户端应以 `mcp-hub` 注册，而不是 `github` 或 `github-mcp-server`。
+> **MCP Hub · Fongap Labs · 通用 MCP 网关 · 模块化服务接入。** 产品以注册模块为单位提供独立的 MCP 工具、OAuth Resource 和管理入口。当前已实现 GitHub 模块；未来服务按相同协议接入，而不是把整个 Hub 定位为 GitHub MCP Server。
 
 > **隔离边界**：本共享 MCP Hub 不提供 `fongap-bot`、Action Worker 的任务提交、执行或权限代理工具。即使 GitHub Owner 相同，普通 MCP 客户端授权也不代表获准调用 Fongap Labs 的自动化机器人。专用 Agent 入口由 Action Worker 的 GitHub 原生工作流提供，使用独立的 GitHub 身份白名单校验，并由 Action Worker 再次检查仓库能力；不复用共享 MCP 的授权。共享 Hub 不保存或签发 fongap-bot 的 GitHub App 私钥及执行令牌。 普通 MCP 工具（包括创建 Issue）不能作为机器人任务执行的授权凭据。
 
-一个面向**多个 GitHub 用户名／组织名**的 MCP 网关。GitHub Token 通过独立网页添加，Worker 根据仓库所属 owner 精确选择凭据；Agent 不接受、不接触、不能读取或导出任何已存储的 GitHub Token。
+MCP Hub 为不同模块提供统一的 OAuth 客户端管理、权限策略和受保护的管理后台。当前 GitHub 模块支持连接多个 GitHub 用户名／组织名，Worker 根据仓库所属 Owner 精确选择加密凭据；Agent 无法读取或导出这些 Token。
 
 **状态**：已通过本地单元测试和带 SQLite 的端到端模拟测试。**尚未在真实 Cloudflare Workers 部署、与实际 GitHub 连接或完成第三方 MCP 客户端互操作验收**。这是可部署的源码工程，不是已上线的服务。当前使用无状态 JSON 响应的 MCP Streamable HTTP 子集，不支持 SSE 服务端推送、资源订阅、Prompt 和会话恢复。请先在测试域名完成验收，再接入真实生产仓库。
 
 ## 产品标识和避免混淆
 
 - 产品显示名称：**MCP Hub**；来源：**Fongap Labs**；版本：**v0.1.0**；MCP `serverInfo.name`：`mcp-hub`；客户端推荐配置名：`mcp-hub`。
-- `/admin` 和 OAuth 授权页显式标注「非 GitHub 官方 MCP Server」。
-- 产品独立图标为 `#286F78` 的四端点连接网络，**不是** GitHub 的 Octocat / Invertocat 标志。`/brand/icon.svg` 同时用作网页图标。
+- `/admin` 是通用 Hub 管理中心；各模块管理入口为 `/<service>/admin`，如 `/github/admin`。只有 GitHub 模块使用「非 GitHub 官方 MCP Server」说明。
+- 产品独立图标为 `#286F78` 的连接网络标记，**不是** GitHub 的 Octocat / Invertocat 标志；管理页直接内嵌 SVG，避免跨路径加载时显示破图。
 - GitHub 名称只用于说明支持的第三方服务；不使用官方 Logo 冒充本产品标识，不以 `github-mcp-server` 命名。
 
 ## 安全设计
@@ -49,7 +49,7 @@
 
 ## MCP Hub 部署边界
 
-目标：`fongap-labs/mcp-hub`、Cloudflare Worker `mcp-hub`、D1 数据库 `mcp-hub`（绑定 `MCP_DB`）、唯一公开域名 `https://mcp.135468.xyz`。根路径 `/` 是默认 MCP，`/github` 是独立 GitHub MCP；每个入口使用不同的 OAuth Resource 和 Access Token。管理界面仍为 `/admin`。
+目标：`fongap-labs/mcp-hub`、Cloudflare Worker `mcp-hub`、D1 数据库 `mcp-hub`（绑定 `MCP_DB`）、唯一公开域名 `https://mcp.135468.xyz`。MCP 入口 `/` 与 `/github` 保持各自 OAuth Resource 和 Access Token。通用管理中心为 `/admin`，GitHub 服务管理为 `/github/admin`。新的服务管理路径必须配置 Cloudflare Access 保护。
 
 ### 统一交由 Action Worker 部署
 
