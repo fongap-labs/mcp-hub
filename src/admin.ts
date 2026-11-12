@@ -81,13 +81,11 @@ export async function adminPage(request: Request,env: Env,service?: McpModule): 
     return html(renderServiceAdminDocument({session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,
       service,rows:serviceRows}),200,sessionCookie?{'Set-Cookie':sessionCookie}:{});
   }
-  const {results=[]}=await env.MCP_DB.prepare('SELECT owner,owner_kind,enabled,updated_at FROM github_connections ORDER BY owner').all();
   const clients=(await env.MCP_DB.prepare('SELECT client_id,client_name,redirect_uris,approved,allowed_owners,allow_write,allowed_resources,allowed_tools FROM oauth_clients ORDER BY created_at DESC LIMIT 100').all()).results||[];
   const catalog=policyCatalog(env);
   const clientRows=clients.map(c=>renderClientRow(c,escapeHtml,catalog)).join('');
   const pending=(await env.MCP_DB.prepare("SELECT id,client_id,owner,repo,title,body,expires_at FROM approval_requests WHERE status='pending' AND expires_at>? ORDER BY created_at ASC LIMIT 50").bind(now()).all()).results||[];
   const pendingRows=pending.map(r=>renderPendingRow(r,escapeHtml)).join('');
-  const rows=results.map(r=>renderConnectionRow(r,escapeHtml)).join('');
   const runnerRows=(await listRunners(env)).map(r=>{
     const seen=r.observedAt?new Date(r.observedAt).toISOString().slice(0,19).replace('T',' ')+' UTC':'从未上报';
     const action=r.availability==='unavailable'
@@ -95,12 +93,13 @@ export async function adminPage(request: Request,env: Env,service?: McpModule): 
       : `<button type="button" class="revoke-runner danger" data-runner="${escapeHtml(r.runnerId)}">撤销</button>`;
     return `<tr><td><strong>${escapeHtml(r.displayName)}</strong><div><code>${escapeHtml(r.runnerId)}</code></div></td><td>${escapeHtml(r.capabilities.join(', '))}</td><td>${r.activeConcurrency}/${r.maxConcurrency}</td><td>${escapeHtml(r.availability)}</td><td>${escapeHtml(seen)}</td><td>${action}</td></tr>`;
   }).join('');
-  const serviceCards=MCP_MODULES.map(module=>({
-    id:module.id,
-    description:module.description,
-    endpointPaths:module.endpoints.map(endpoint=>endpoint.path)
-  }));
-  const page=renderAdminDocument({session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,rows,clientRows,pendingRows,serviceCards});
+  const serviceCards=MCP_MODULES.map(module=>{
+    const id=escapeHtml(module.id);
+    const endpoints=module.endpoints.map(endpoint=>'<code>'+escapeHtml(endpoint.path)+'</code>').join('、');
+    return `<article class="service-card"><h3>${id} MCP</h3><p>${escapeHtml(module.description)}</p>
+      <p class="muted">服务入口：${endpoints}</p><a href="/${encodeURIComponent(module.id)}/admin">管理此服务</a></article>`;
+  }).join('');
+  const page=renderAdminDocument({session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,clientRows,pendingRows,serviceCards});
   const runnerSection=renderRunnerSection(runnerRows);
   return html(page.replace('</main>',runnerSection+'</main>'),200,
     sessionCookie?{'Set-Cookie':sessionCookie}:{});
