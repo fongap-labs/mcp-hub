@@ -40,7 +40,7 @@ function fixture() {
       try {
         const result = statements.map(({ query, args }) => {
           const prepared = sqlite.prepare(query);
-          const results = prepared.reader ? prepared.all(...args) : (prepared.run(...args), []);
+          const results = prepared.columns().length > 0 ? prepared.all(...args) : (prepared.run(...args), []);
           return { success: true, results };
         });
         sqlite.exec('COMMIT');
