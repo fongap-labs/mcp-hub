@@ -66,7 +66,7 @@ async function start(env, executor, credentials = [
 ]) {
   const server = await startLoopbackRuntimeTaskService({
     journal: env.journal, runtimeClient: env.hub, executor,
-    runnerCredentials: credentials,
+    runnerCredentials: credentials, nowMs: () => clock, leaseCheckMs: 100,
   });
   return {
     server,
@@ -263,4 +263,101 @@ test('loopback-only listener and transport reject unsafe origins and credentials
       origin: 'https://example.com', runnerRuntimeToken: 'short',
     }), /runtime_runner_token_invalid/);
   } finally { env.close(); }
+});
+
+
+test('Runtime lease watchdog holds in-flight edits when renewal expires', async () => {
+  const env = wrapper();
+  let started;
+  const began = new Promise(resolve => { started = resolve; });
+  let aborted = 0;
+  const runtime = await start(env, { async execute(_task, {signal}) {
+    return new Promise((_resolve,reject) => {
+      signal.addEventListener('abort', () => { aborted++; reject(Error('aborted by lease fence')); }, {once:true});
+      started();
+    });
+  } });
+  try {
+    const executing = sendRaw(runtime.origin, '/runtime/v1/tasks/execute');
+    await began;
+    env.hub.record.lease_expires_at = Math.floor(clock / 1000) - 1;
+    const response = await executing;
+    assert.equal(response.status, 202);
+    assert.equal((await response.json()).status,'outcome_uncertain');
+    assert.equal(aborted,1);
+    assert.equal(env.journal.recoveryPlan()[0].state,'uncertain');
+    assert.equal(env.hub.commits.at(-1).state,'side_effects_uncertain');
+    assert.equal((await sendRaw(runtime.origin,'/runtime/v1/tasks/execute')).status,409);
+  } finally { await runtime.stop(); env.close(); }
+});
+
+test('Runtime fences an in-flight job when Hub lease cannot be verified', async () => {
+  const env = wrapper();
+  let started;
+  const began = new Promise(resolve=>{started=resolve;});
+  const realGet=env.hub.get.bind(env.hub);
+  let calls=0;
+  env.hub.get=async id=> {
+    calls++;
+    if(calls > 2) throw Error('Hub connection lost');
+    return realGet(id);
+  };
+  const runtime=await start(env,{async execute(_task,{signal}) {
+    return new Promise((_resolve,reject)=>{
+      signal.addEventListener('abort',()=>reject(Error('fenced')),{once:true});
+      started();
+    });
+  }});
+  try {
+    const executing=sendRaw(runtime.origin,'/runtime/v1/tasks/execute');
+    await began;
+    const result=await executing;
+    assert.equal(result.status,202);
+    assert.equal(env.journal.recoveryPlan()[0].state,'uncertain');
+    assert.equal((await sendRaw(runtime.origin,'/runtime/v1/tasks/execute')).status,409);
+  }finally{await runtime.stop();env.close();}
+});
+
+test('Runner authenticated fence immediately aborts a running task and is not replayable',async()=>{
+  const env=wrapper();
+  let started;
+  const began=new Promise(resolve=>{started=resolve;});
+  const runtime=await start(env,{async execute(_task,{signal}){
+    return new Promise((_resolve,reject)=>{
+      signal.addEventListener('abort',()=>reject(Error('fenced')),{once:true});
+      started();
+    });
+  }});
+  try {
+    const executing=sendRaw(runtime.origin,'/runtime/v1/tasks/execute');
+    await began;
+    const fenced=await sendRaw(runtime.origin,'/runtime/v1/tasks/fence');
+    assert.equal(fenced.status,202);
+    assert.equal((await fenced.json()).status,'outcome_uncertain');
+    assert.equal((await executing).status,202);
+    assert.equal(env.journal.recoveryPlan()[0].state,'uncertain');
+    assert.equal((await sendRaw(runtime.origin,'/runtime/v1/tasks/execute')).status,409);
+  }finally{await runtime.stop();env.close();}
+});
+
+test('wrong Runner credential cannot fence an existing lease',async()=>{
+  const env=wrapper();
+  let started;
+  const began=new Promise(resolve=>{started=resolve;});
+  const runtime=await start(env,{async execute(){
+    started();
+    return {ok:true};
+  }},[
+    {runnerId,token:runtimeRunnerToken},
+    {runnerId:anotherRunner,token:otherToken},
+  ]);
+  try {
+    // An inactive task still cannot be fenced by a different Runner.
+    const forbidden=await sendRaw(runtime.origin,'/runtime/v1/tasks/fence',
+      {dispatchId,taskRef,resourceKey,leaseId},otherToken);
+    assert.equal(forbidden.status,409);
+    assert.equal(env.journal.recoveryPlan()[0].state,'dispatched');
+    assert.equal((await sendRaw(runtime.origin,'/runtime/v1/tasks/execute')).status,200);
+    await began;
+  }finally{await runtime.stop();env.close();}
 });
