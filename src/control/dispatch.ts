@@ -81,8 +81,11 @@ export async function getDispatchStatus(request: Request, env: Env): Promise<Res
   const auth = await runtimeAuth(request, env); if (auth) return auth;
   const id = new URL(request.url).searchParams.get('dispatchId') || '';
   if (!DISPATCH_ID.test(id)) return json({ error: 'invalid_dispatch_id' }, 400);
-  const row = dbRow(await stmt(env, `SELECT dispatch_id,status,runner_id,lease_id,created_at,offered_at,offer_expires_at,
-    accepted_at,closed_at,runtime_sequence,runtime_state,last_reason_code FROM runner_dispatches WHERE dispatch_id=?`, id).first());
+  const row = dbRow(await stmt(env, `SELECT d.dispatch_id,d.task_ref,d.resource_key,d.status,d.runner_id,d.lease_id,
+    d.created_at,d.offered_at,d.offer_expires_at,d.accepted_at,d.closed_at,d.runtime_sequence,
+    d.runtime_state,d.last_reason_code,l.expires_at AS lease_expires_at
+    FROM runner_dispatches d LEFT JOIN runner_leases l ON l.lease_id=d.lease_id
+    WHERE d.dispatch_id=?`, id).first());
   return row ? json(row) : json({ error: 'not_found' }, 404);
 }
 

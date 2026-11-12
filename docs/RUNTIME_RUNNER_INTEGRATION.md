@@ -62,3 +62,27 @@ The Hub registry, queue, quota, offer, acceptance, renewal and reconciliation ar
 **Still missing**: a live Delta Coding Runtime or Action Worker Runner process exposing a trusted task-lookup API, credentials for that Runtime-only API, and durable execution/result-journal wiring. The shared MCP endpoint cannot bypass Action Worker's existing private agent-task-ingress GitHub identity restrictions.
 
 No credentials, production endpoints, deployment workflows or background services are added. Deploy only after the remaining code tasks and production acceptance plan are complete.
+
+
+## Durable task store and recovery (Node Runtime)
+
+The optional Node implementation is in runtime/sqlite-task-journal.mjs. It creates a separate private SQLite file belonging to the trusted Coding Runtime, encrypts task and result JSON with AES-256-GCM, and persists a monotonically increasing journal sequence for each task. The Runtime must obtain the stable 32-byte encryption key from its own secret manager; losing or rotating the key without migration makes stored data unreadable. Do not copy that key or the SQLite database into the public Hub.
+
+Workflow:
+
+1. RuntimeTaskJournal.createTask creates encrypted task content in Runtime storage.
+2. Runtime submits the opaque reference through RuntimeDispatchClient.create; after the Hub confirms a dispatch ID, RuntimeTaskJournal.attachDispatch binds that ID locally. Repeated Hub submissions must use the same idempotency key.
+3. A trusted Runtime endpoint authenticates the Runner separately and constructs createTrustedRuntimeTaskPort with its authenticated Runner ID. The port calls Hub using the Runtime-only credential to verify the dispatch ID, task reference, resource key, accepted status, Runner, lease ID and current lease expiry. Only then may the encrypted task be decrypted and returned.
+4. Immediately before starting any side-effectful tool, the trusted Runtime calls await journal.beginSideEffects(taskRef, runnerId, leaseId, runtimeClient). This repeats the live lease checks and **durably commits execution intent first**. Never run a tool if it fails.
+5. RuntimeTaskJournal.complete atomically stores the encrypted result and a terminal state. flushRuntimeReconciliations sends only a status and sequence to Hub, and acknowledges locally only after the Hub verifies the same sequence and transition.
+6. After a crash, recoverAfterRestart marks claimed or started work as uncertain. Do not auto-replay it. An operator or trusted Runtime audit must independently prove that no side effect occurred before confirmNeverStarted records hashed evidence. Only a successful not_started Hub reconciliation permits the local task to become eligible for redispatch.
+
+No log, prompt, file content or execution result is sent through Hub. The SQLite journal keeps a small local event history, including a SHA-256 digest of recovery evidence rather than the evidence itself. Keep encrypted data backups and migration procedures in the trusted Runtime environment.
+
+The Runtime service-side adapter is runtime/runtime-task-port.mjs. It must run in a **different trust boundary** from the Runner process: the Runtime's authenticated task-lookup HTTP endpoint, token verification, journal key custody and the actual Coding Engine are external to this repository. Do not instantiate that port in an untrusted Runner or provide it with MCP_RUNTIME_KEY. It can be connected in-process only in unit tests.
+
+### Validated and not yet integrated
+
+Automated tests in tests/runtime-task-journal.test.js exercise real Node SQLite persistence, encrypted reopen, authorised lease-bound task lookup, cancellation, interruption, uncertain side-effects, duplicate suppression, Hub reconciliation and explicit recovery confirmation.
+
+This change is a reusable Node Runtime journal and protocol adapter; it does **not** ship a live Delta Coding Engine, an authenticated task server or a running Action Worker Agent, and it does not change production deployment.
