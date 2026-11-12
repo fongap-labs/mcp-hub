@@ -82,15 +82,15 @@ test('Access MFA mode enters Admin without another OTP while retaining session/C
     const {client_id}=await register.json();
     const approval=await worker.fetch(authRequest('/admin/api/client-approval','POST',
       JSON.stringify({clientId:client_id,approved:true,allowedOwners:['acme'],
-        allowedResources:['default'],allowedTools:['github:github_available_owners'],
+        allowedResources:['default','github'],allowedTools:[
+          'github:github_available_owners','github:github_get_repository'
+        ],
         allowWrite:false}),{
         Origin:origin,Cookie:cookie,'Content-Type':'application/json',
         'X-CSRF-Token':session.csrf
       }),env);
-    // Some resource mappings require a matching GitHub server; use the
-    // response to guard the strict no-authorization-on-error behavior.
-    assert.ok([200,400].includes(approval.status));
-    if(approval.status===200){
+    assert.equal(approval.status,200,await approval.clone().text());
+    {
       const verifier='v'.repeat(48);
       const query=new URLSearchParams({response_type:'code',client_id,
         redirect_uri:'http://127.0.0.1:9876/callback',resource:origin,scope:'mcp:read',
