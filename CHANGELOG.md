@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- 新增: MCP Hub 全局管理入口 /admin 与按模块划分的 /<service>/admin；GitHub 连接管理迁移到 /github/admin，不修改原有 OAuth Resource 和 MCP 工具路径。
+- 优化: 全局产品标识改为通用可扩展 MCP 网关，非官方 GitHub 声明移至 GitHub 模块，修复品牌图标依赖外部图片而出现的破图。
+
+
 - 修复: 优先使用 Cloudflare Workers 原生受信任 Access 身份及精确 AUD 校验，保留手工 JWT 验签兼容路径；缺失原生上下文时不放行，避免浏览器令牌传递差异引发登录误拒绝。
 
 - 新增: Cloudflare Access 独立 MFA 登录可在显式启用后取代本地重复 TOTP，管理后台自动建立受签名保护的 CSRF 会话，OAuth 授权保留确认操作与现有安全边界。
