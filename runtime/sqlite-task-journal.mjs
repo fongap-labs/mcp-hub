@@ -19,8 +19,7 @@ function seal(key, value) {
   const raw = Buffer.from(JSON.stringify(value));
   if (raw.length > 262144) throw new RangeError('runtime_payload_too_large');
   const iv = randomBytes(12), cipher = createCipheriv('aes-256-gcm', key, iv);
-  return Buffer.concat([iv, cipher.getAuthTag ? Buffer.alloc(0) : Buffer.alloc(0),
-    cipher.update(raw), cipher.final(), cipher.getAuthTag()]).toString('base64');
+  return Buffer.concat([iv, cipher.update(raw), cipher.final(), cipher.getAuthTag()]).toString('base64');
 }
 function unseal(key, value) {
   const raw = Buffer.from(value, 'base64');
@@ -141,8 +140,20 @@ export class RuntimeTaskJournal {
     });
   }
   /** Persist execution intent BEFORE running tools. Second call fails closed. */
-  beginSideEffects(taskRef, runnerId, leaseId) {
+  async beginSideEffects(taskRef, runnerId, leaseId, runtimeClient) {
     valid(taskRef, REF, 'task_ref'); valid(runnerId, RUNNER, 'runner_id'); valid(leaseId, LEASE, 'lease_id');
+    if (!runtimeClient || typeof runtimeClient.get !== 'function') throw new TypeError('runtime_hub_client_required');
+    const before = this.#row(taskRef);
+    if (before.state !== 'claimed' || before.runner_id !== runnerId || before.lease_id !== leaseId) {
+      throw new Error('runtime_task_conflict');
+    }
+    const status = await runtimeClient.get(before.dispatch_id);
+    if (status.dispatch_id !== before.dispatch_id || status.task_ref !== taskRef ||
+        status.resource_key !== before.resource_key || status.status !== 'accepted' ||
+        status.runner_id !== runnerId || status.lease_id !== leaseId ||
+        !Number.isSafeInteger(status.lease_expires_at) || status.lease_expires_at <= this.#time()) {
+      throw new Error('runtime_lease_not_authorized');
+    }
     return this.#tx(() => {
       const row = this.#row(taskRef);
       if (row.runner_id !== runnerId || row.lease_id !== leaseId) throw new Error('runtime_lease_not_authorized');
