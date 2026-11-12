@@ -57,7 +57,7 @@ Cloudflare Worker
 
 不要保护 `/`、`/github`、`/oauth/*` 或 `/.well-known/*`：它们需要被标准 MCP/OAuth 客户端访问。请关闭 Access Managed OAuth，保留 MCP Hub 原生 OAuth。配置中填入实际的团队域名（ISSUER）及上述 Access 应用的 Audience（AUD），有多个应用就将 AUD 用逗号连接。
 
-**推荐的安全便捷登录方式**：在 Cloudflare Zero Trust → Integrations → Identity providers 启用 **Passkeys（通行密钥）**，在此 Access 应用中允许该登录方式；先在当前邮箱验证码下完成通行密钥注册和实际登录验证，成功后再关闭该应用的邮箱 One-time PIN 登录选项。Access Allow Policy 仍应限制到指定本人身份，不要使用 Allow Everyone 或 Bypass；启用单一登录方式时可开启 Instant authentication。Access 负责验证身份，MCP Hub 仍执行独立的 6 位 TOTP 二次确认（30 秒变化、不可复用），而不是用邮箱验证码替代手机 TOTP。
+**登录方式与切换边界**：默认 `access-totp` 模式继续采用 Access 身份验证 + MCP Hub 独立动态验证码。用户选定的目标是 **Cloudflare 账号登录 + Cloudflare Access 独立 MFA**，省去 Email One-time PIN 与本地重复 TOTP。此目标只在下文“Cloudflare 账号 + Cloudflare MFA：安全切换”的实际双因素验收成功并显式启用 `MCP_AUTH_MODE=cloudflare-mfa` 后生效。任何模式都不能启用 Allow Everyone 或 Bypass。
 
 **Access JWT 到达 Worker 的检查**：浏览器登录成功后，Cloudflare 应为受保护请求注入 `Cf-Access-Jwt-Assertion`；浏览器也可能带有 `CF_Authorization` Cookie。MCP Hub 优先验证请求头，只有请求头完全缺失时才验证 Cookie；两者均执行相同的 RSA 签名、Issuer、AUD、有效期与用户身份校验。若请求头存在但无效，不会以 Cookie 绕过；二者均无效则继续返回 403，浏览器得到说明页面，API 仍返回 JSON。**此兼容逻辑不是 Access 应用路径配置的替代品**：`/admin`、`/admin/*`、`/authorize` 必须在 Access 应用中受到保护。若为不同路径配置了多个 Access 应用，`MCP_ACCESS_AUD` 应准确包含这些应用的 Audience，并严格核对访问策略。
 
