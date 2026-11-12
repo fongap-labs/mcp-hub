@@ -86,3 +86,5 @@ The Worker config binds the producer and consumer and sends repeatedly failing c
 ## Runtime integration boundary
 
 This establishes a generic resource dispatch contract. Delta's published architecture assigns Run state, cancellation, retry, recovery, tool dispatch, and idempotency to Delta Runtime. The Hub contract preserves that boundary, but the Delta repository does not currently expose a Coding Engine task submission/pull API. Runtime must adopt this contract and provide a Runner-facing task retrieval path before Coding Worker execution can be enabled. Hub will not invent that Runtime API or copy task bodies into D1/Queues.
+
+A typed Runner/Runtime HTTP client and offer handoff helper are provided in [Runtime–Runner Handoff Adapter](RUNTIME_RUNNER_INTEGRATION.md). This does not replace the missing trusted Runtime task-lookup API or grant the shared MCP service private Agent execution authority.
