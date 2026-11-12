@@ -1,7 +1,7 @@
 import type { Env } from './types.ts';
 import {json,html} from './util.ts';
 import {BRAND_ICON} from './brand.ts';
-import {accessIdentity} from './access.ts';
+import {accessIdentityFromWorker,type WorkerAccessContext} from './access.ts';
 import {cloudflareMfaOnly} from './auth-mode.ts';
 import {renderAccessDenied} from './i18n/zh-CN.ts';
 import {protectedMetadata,serverMetadata,registerClient,authorizeGet,authorizePost,tokenEndpoint,revokeToken,validateMcpToken,challenge,cleanExpired} from './oauth.ts';
@@ -24,7 +24,7 @@ function accessDenied(request: Request,isMfaOnly: boolean): Response {
 }
 
 export default {
-  async fetch(request: Request,env: Env): Promise<Response> {
+  async fetch(request: Request,env: Env,ctx?: WorkerAccessContext): Promise<Response> {
     try {
       const url=new URL(request.url), path=url.pathname;
       if(path==='/brand/icon.svg'&&request.method==='GET')return new Response(BRAND_ICON,{headers:{'Content-Type':'image/svg+xml; charset=utf-8','Cache-Control':'public, max-age=86400','X-Content-Type-Options':'nosniff'}});
@@ -37,7 +37,7 @@ export default {
       // default until independent Access MFA has been verified and activated.
       if(path==='/authorize'||path==='/admin'||path.startsWith('/admin/')){
         const isMfaOnly=cloudflareMfaOnly(env);
-        if(!(await accessIdentity(request,env)))return accessDenied(request,isMfaOnly);
+        if(!(await accessIdentityFromWorker(request,env,ctx)))return accessDenied(request,isMfaOnly);
       }
       const metadataServer=serverForMetadata(path);
       if(metadataServer)return protectedMetadata(env,metadataServer);
