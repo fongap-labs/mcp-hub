@@ -244,3 +244,30 @@ test('localhost delivery route is absent by default and uses separate user autho
     assert.equal(first.status,404);
   }finally{await new Promise(r=>server.close(r));fx.clean();}
 });
+
+
+test('authenticated localhost delivery endpoint creates PR without Runner execution', async () => {
+  const fx=fixture(),mock=githubMock(fx);
+  await fx.completed();
+  const server=await startLoopbackRuntimeTaskService({
+    journal:fx.journal, taskDelivery:delivery(fx,mock),
+    runtimeClient:{async get(){throw Error('Unexpected Hub query');},
+      async reconcile(){throw Error('Unexpected reconcile');}},
+    executor:{async execute(){throw Error('Unexpected Coding Engine execution');}},
+    runnerCredentials:[{runnerId,token:'rtkn_'+'z'.repeat(43)}],
+  });
+  try {
+    const origin='http://127.0.0.1:'+server.address().port;
+    const post=(payload,bearer=token)=>fetch(origin+'/runtime/v1/tasks/deliver',{
+      method:'POST',headers:{'Content-Type':'application/json',
+        ...(bearer?{Authorization:'Bearer '+bearer}:{})},
+      body:JSON.stringify(payload),
+    });
+    assert.equal((await post({taskRef},'')).status,401);
+    assert.equal((await post({taskRef,prompt:'untrusted override'})).status,400);
+    const response=await post({taskRef});
+    assert.equal(response.status,200);
+    assert.equal((await response.json()).pullRequest,91);
+    assert.equal(mock.state.prs.length,1);
+  } finally { await new Promise(resolve=>server.close(resolve)); fx.clean(); }
+});
