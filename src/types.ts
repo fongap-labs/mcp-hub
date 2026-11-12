@@ -74,6 +74,7 @@ export interface Env {
   MCP_BUILD_SHA?: string;
   MCP_ACCESS_ISSUER: string;
   MCP_ACCESS_AUD: string;
+  MCP_AUTH_MODE?: 'access-totp' | 'cloudflare-mfa';
   MCP_TOTP_SECRET: string;
   MCP_COOKIE_KEY: string;
   MCP_KEYRING_JSON: string;

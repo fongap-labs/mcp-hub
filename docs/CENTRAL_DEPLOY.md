@@ -57,7 +57,7 @@ Cloudflare Worker
 
 不要保护 `/`、`/github`、`/oauth/*` 或 `/.well-known/*`：它们需要被标准 MCP/OAuth 客户端访问。请关闭 Access Managed OAuth，保留 MCP Hub 原生 OAuth。配置中填入实际的团队域名（ISSUER）及上述 Access 应用的 Audience（AUD），有多个应用就将 AUD 用逗号连接。
 
-**推荐的安全便捷登录方式**：在 Cloudflare Zero Trust → Integrations → Identity providers 启用 **Passkeys（通行密钥）**，在此 Access 应用中允许该登录方式；先在当前邮箱验证码下完成通行密钥注册和实际登录验证，成功后再关闭该应用的邮箱 One-time PIN 登录选项。Access Allow Policy 仍应限制到指定本人身份，不要使用 Allow Everyone 或 Bypass；启用单一登录方式时可开启 Instant authentication。Access 负责验证身份，MCP Hub 仍执行独立的 6 位 TOTP 二次确认（30 秒变化、不可复用），而不是用邮箱验证码替代手机 TOTP。
+**登录方式与切换边界**：默认 `access-totp` 模式继续采用 Access 身份验证 + MCP Hub 独立动态验证码。用户选定的目标是 **Cloudflare 账号登录 + Cloudflare Access 独立 MFA**，省去 Email One-time PIN 与本地重复 TOTP。此目标只在下文“Cloudflare 账号 + Cloudflare MFA：安全切换”的实际双因素验收成功并显式启用 `MCP_AUTH_MODE=cloudflare-mfa` 后生效。任何模式都不能启用 Allow Everyone 或 Bypass。
 
 **Access JWT 到达 Worker 的检查**：浏览器登录成功后，Cloudflare 应为受保护请求注入 `Cf-Access-Jwt-Assertion`；浏览器也可能带有 `CF_Authorization` Cookie。MCP Hub 优先验证请求头，只有请求头完全缺失时才验证 Cookie；两者均执行相同的 RSA 签名、Issuer、AUD、有效期与用户身份校验。若请求头存在但无效，不会以 Cookie 绕过；二者均无效则继续返回 403，浏览器得到说明页面，API 仍返回 JSON。**此兼容逻辑不是 Access 应用路径配置的替代品**：`/admin`、`/admin/*`、`/authorize` 必须在 Access 应用中受到保护。若为不同路径配置了多个 Access 应用，`MCP_ACCESS_AUD` 应准确包含这些应用的 Audience，并严格核对访问策略。
 
@@ -68,6 +68,19 @@ Cloudflare Worker
 **前置条件**：Access 两个 Variables 与 GitHub TOTP Secret 全部就绪后才能运行生产部署；部署脚本会校验并同步 TOTP Secret。请先在 GitHub Secrets 设置原有验证器使用的相同密钥，不要新生成替换。部署使用 D1 新迁移 `0005_admin_totp.sql`，不修改已有 GitHub 凭据密文。
 
 新方式启用并验收通过后，才允许通过受控运维变更清理旧 `MCP_ADMIN_KEY` 与 `MCP_APPROVAL_KEY`；当前部署既不传输也不删除旧值。Cloudflare Access 策略本身仍需首次在 Zero Trust 配置，不在本次 Worker 发布范围内。
+
+## Cloudflare 账号 + Cloudflare MFA：安全切换
+
+Cloudflare Access 自 2026 年起支持 **Cloudflare 账号作为登录身份提供方**，并提供 **独立 MFA（Authenticator App/TOTP）**。这与本地 MCP Hub TOTP 是两种不同的机制。**在 Cloudflare Access 强制 MFA 完成验收前，MCP Hub 保持默认的 `access-totp` 模式，不可提前切换。**
+
+1. 在 Cloudflare Zero Trust → **Integrations → Identity providers** 中添加或选中 **Cloudflare**；启用 `Restrict to account members`，并在 MCP Hub Access 应用的 **Login methods** 仅允许 Cloudflare 登录。关闭该应用的 Email One-time PIN（其他应用的 OTP 不需要全局删除）。
+2. 在 **Access controls → Access settings → Independent MFA** 先启用组织级 MFA 能力并允许 **Authenticator application**；然后在 MCP Hub Access 应用或适用策略上**强制要求该 MFA**。先在 App Launcher 完成验证器注册（团队域名 `https://<your-team>.cloudflareaccess.com/AddMfaDevice`）。**不要只依赖 Cloudflare Dashboard 账号启用了 2FA 这一事实代替 Access 应用级 MFA 配置**。 如果 Cloudflare 账号登录时已完成 MFA，而 Access 又提示第二次验证，可在 Access 的 **Use identity provider MFA** 中启用 AMR 匹配（仅在 IdP 实际返回可接受的 `amr` 时跳过重复提示）；否则 Access 仍会独立要求 MFA。请以实际登录验收为准，不要为减少一次提示而关闭应用的 MFA 强制要求。
+3. 应用 **Allow Policy** 使用 Cloudflare Account Member 和/或本人身份限制；禁止 Allow Everyone、Bypass 或非预期的替代登录方式。确保 `/admin`、`/admin/*` 和 `/authorize` 均受相同或等效强度的 Access Policy 保护，确认实际 AUD 与部署 Variables 一致。
+4. **先保持旧模式验收 Cloudflare 登录和 MFA**：新浏览器无 Access 会话应被拦截；通过 Cloudflare 账号登录应被强制要求验证器 6 位码；未通过 MFA 不能进入 MCP Hub 的旧 TOTP 页面；无法用邮件 OTP 绕过；无有效签名、错误 AUD、过期 JWT 均应拒绝。
+5. 上述验收通过后，才在 **Action Worker 仓库 Actions Variables** 中设置 `MCP_AUTH_MODE=cloudflare-mfa`，通过中央手动部署服务发布最新主分支。验收：Access 成功后直接进入管理后台（后台自动签发短期签名 Session/CSRF Cookie）、OAuth 授权仍须明确点击确认但不再要求第二个 TOTP；写操作仍需逐项审批；退出登录应跳转 Cloudflare Access 注销入口。
+6. 回退只需把 `MCP_AUTH_MODE` 改回 `access-totp`，并经中央部署。为了安全回退，**本阶段仍保留原有 `MCP_TOTP_SECRET` GitHub Secret 及其部署必需校验**，不会生成新 TOTP 密钥或覆盖旧加密密钥。生产模式切换与 Cloudflare Access Policy 修改均需要分别留存验收记录。
+
+实现边界：`MCP_AUTH_MODE` 未配置、为空或为 `access-totp` 时沿用旧验证；仅明确设置 `cloudflare-mfa` 才禁用 MCP Hub 本地重复 TOTP。代码验证 Cloudflare Access JWT 签名、Issuer、AUD、有效期和 Subject，**无法仅从通用 JWT 自行证明 Cloudflare Independent MFA Policy 已强制执行**；必须先在 Cloudflare 管理侧配置并实际验收，不能把环境变量当作 MFA 本身。
 
 ## 3. 数据迁移
 

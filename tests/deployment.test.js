@@ -29,7 +29,7 @@ test('Generates exact approved MCP Hub bindings, no credentials or runtime secre
  assert.deepEqual(cfg.routes,[{pattern:'mcp.135468.xyz',custom_domain:true}]);
  for(const s of SECRET_NAMES)assert.ok(!JSON.stringify(cfg).includes(s));
  assert.ok(!JSON.stringify(cfg).includes('synthetic-credential'));
- assert.equal(Object.keys(cfg.vars).length,8);
+ assert.equal(Object.keys(cfg.vars).length,9);
 });
 test('treats missing, empty and whitespace-only optional deployment settings as defaults',()=>{
   for (const overrides of [
@@ -49,6 +49,12 @@ test('treats missing, empty and whitespace-only optional deployment settings as 
   assert.throws(()=>loadDeployConfig(env({GMC_CONTENT_MODE:'unknown'})),/GMC_CONTENT_MODE/);
   assert.throws(()=>loadDeployConfig(env({MCP_OAUTH_TTL:'299'})),/MCP_OAUTH_TTL/);
   assert.throws(()=>loadDeployConfig(env({MCP_ACCESS_ISSUER:'fongen.cloudflareaccess.com'})),/MCP_ACCESS_ISSUER/);
+  assert.equal(loadDeployConfig(env()).authMode,'access-totp');
+  assert.equal(buildWranglerConfig(loadDeployConfig(env())).vars.MCP_AUTH_MODE,'access-totp');
+  const mfa=loadDeployConfig(env({MCP_AUTH_MODE:'cloudflare-mfa'}));
+  assert.equal(mfa.authMode,'cloudflare-mfa');
+  assert.equal(buildWranglerConfig(mfa).vars.MCP_AUTH_MODE,'cloudflare-mfa');
+  assert.throws(()=>loadDeployConfig(env({MCP_AUTH_MODE:'none'})),/MCP_AUTH_MODE/);
 });
 test('rejects invalid or incomplete deployment configurations',()=>{
  for(const x of [{MCP_D1_ID:''},{MCP_PUBLIC_URL:'http://mcp.135468.xyz'},{MCP_PUBLIC_URL:'https://mcp.example.workers.dev'},{MCP_PUBLIC_URL:'https://gmc.135468.xyz/mcp'},{GMC_WRITE_MODE:'true'},{GMC_CONTENT_MODE:'true'},{MCP_OAUTH_TTL:'120'},{MCP_ACTIVE_ID:''},{MCP_ACCESS_ISSUER:''},{MCP_ACCESS_ISSUER:'https://wrong.example'},{MCP_ACCESS_AUD:''},{DEPLOY_SOURCE_SHA:'main'},{DEPLOY_ENVIRONMENT:'mcp-hub'},{DEPLOY_ENVIRONMENT:'mcp-hub-staging'},{DEPLOY_ENVIRONMENT:'mcp-hub-ops'},{CLOUDFLARE_API_TOKEN_SECONDARY:''}]){

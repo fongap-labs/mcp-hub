@@ -30,6 +30,7 @@ export function loadDeployConfig(env) {
   const writeMode = optional('GMC_WRITE_MODE', 'disabled');
   const contentMode = optional('GMC_CONTENT_MODE', 'disabled');
   const oauthTtl = optional('MCP_OAUTH_TTL', '900');
+  const authMode = optional('MCP_AUTH_MODE', 'access-totp');
   const environment = String(env.DEPLOY_ENVIRONMENT ?? 'production');
   if (account && !/^[a-f0-9]{32}$/i.test(account)) errors.push('CLOUDFLARE_ACCOUNT_ID_SECONDARY must be a 32-character account ID');
   if (token && token.length < 8) errors.push('CLOUDFLARE_API_TOKEN_SECONDARY is invalid');
@@ -40,6 +41,7 @@ export function loadDeployConfig(env) {
   if (accessAud && (!/^[A-Za-z0-9_-]+(?:,[A-Za-z0-9_-]+)*$/.test(accessAud) || accessAud.length>512)) errors.push('MCP_ACCESS_AUD must contain one or two approved application audience tags');
   if (!['disabled','approval'].includes(writeMode)) errors.push('GMC_WRITE_MODE must be disabled or approval');
   if (!['disabled','enabled'].includes(contentMode)) errors.push('GMC_CONTENT_MODE must be disabled or enabled');
+  if (!['access-totp','cloudflare-mfa'].includes(authMode)) errors.push('MCP_AUTH_MODE must be access-totp or cloudflare-mfa');
   if (!/^\d+$/.test(oauthTtl) || Number(oauthTtl) < 300 || Number(oauthTtl) > 3600) errors.push('MCP_OAUTH_TTL must be between 300 and 3600');
   if (environment !== 'production') errors.push('Only approved production environment may deploy');
   try {
@@ -47,7 +49,7 @@ export function loadDeployConfig(env) {
     if (url.protocol !== 'https:' || url.pathname !== '/' || url.search || url.hash || url.username || url.password || url.hostname !== 'mcp.135468.xyz') throw Error();
   } catch {errors.push('MCP_PUBLIC_URL must be exactly https://mcp.135468.xyz');}
   if (errors.length) throw new Error(`Deployment configuration invalid: ${errors.join('; ')}`);
-  return {account, token, databaseId, publicUrl, activeId, accessIssuer, accessAud, buildSha, writeMode, contentMode, oauthTtl, environment};
+  return {account, token, databaseId, publicUrl, activeId, accessIssuer, accessAud, buildSha, writeMode, contentMode, oauthTtl, authMode, environment};
 }
 
 export function buildWranglerConfig(config, root=process.cwd()) {
@@ -65,6 +67,7 @@ export function buildWranglerConfig(config, root=process.cwd()) {
       GMC_WRITE_MODE: config.writeMode,
       GMC_CONTENT_MODE: config.contentMode,
       MCP_OAUTH_TTL: config.oauthTtl,
+      MCP_AUTH_MODE: config.authMode,
       MCP_ACTIVE_ID: config.activeId,
       MCP_ACCESS_ISSUER: config.accessIssuer,
       MCP_ACCESS_AUD: config.accessAud,

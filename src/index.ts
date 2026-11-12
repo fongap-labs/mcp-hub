@@ -2,6 +2,7 @@ import type { Env } from './types.ts';
 import {json,html} from './util.ts';
 import {BRAND_ICON} from './brand.ts';
 import {accessIdentity} from './access.ts';
+import {cloudflareMfaOnly} from './auth-mode.ts';
 import {renderAccessDenied} from './i18n/zh-CN.ts';
 import {protectedMetadata,serverMetadata,registerClient,authorizeGet,authorizePost,tokenEndpoint,revokeToken,validateMcpToken,challenge,cleanExpired} from './oauth.ts';
 import {adminRoute} from './admin.ts';
@@ -14,12 +15,12 @@ import {acceptRunnerDispatch,cancelDispatch,consumeDispatchQueue,createDispatch,
 // Browser navigations get an actionable message rather than raw JSON. API
 // clients retain their existing JSON error contract. Authentication remains
 // fail-closed and this response never starts a new login session.
-function accessDenied(request: Request): Response {
+function accessDenied(request: Request,isMfaOnly: boolean): Response {
   const accept=request.headers.get('Accept')||'';
   if(request.method!=='GET'||!accept.includes('text/html')) {
     return json({error:'Cloudflare Access required'},403);
   }
-  return html(renderAccessDenied(),403);
+  return html(renderAccessDenied(isMfaOnly),403);
 }
 
 export default {
@@ -28,12 +29,16 @@ export default {
       const url=new URL(request.url), path=url.pathname;
       if(path==='/brand/icon.svg'&&request.method==='GET')return new Response(BRAND_ICON,{headers:{'Content-Type':'image/svg+xml; charset=utf-8','Cache-Control':'public, max-age=86400','X-Content-Type-Options':'nosniff'}});
       if(path==='/health'&&request.method==='GET'){
-        const ready=Boolean(env.MCP_DB && env.MCP_PUBLIC_URL && env.MCP_ACCESS_ISSUER && env.MCP_ACCESS_AUD && env.MCP_TOTP_SECRET && env.MCP_COOKIE_KEY && env.MCP_KEYRING_JSON && env.MCP_ACTIVE_ID && env.MCP_INGEST_JWK);
+        const ready=Boolean(env.MCP_DB && env.MCP_PUBLIC_URL && env.MCP_ACCESS_ISSUER && env.MCP_ACCESS_AUD && (cloudflareMfaOnly(env)||env.MCP_TOTP_SECRET) && env.MCP_COOKIE_KEY && env.MCP_KEYRING_JSON && env.MCP_ACTIVE_ID && env.MCP_INGEST_JWK);
         return json({status:ready?'ok':'unavailable',ready,build:env.MCP_BUILD_SHA||null,
           dispatchEnabled:Boolean(env.MCP_RUNTIME_KEY&&env.MCP_RUNTIME_KEY.length>=32&&env.MCP_DISPATCH_QUEUE)},ready?200:503);
       }
-      // Access + TOTP protect human-facing routes; machine MCP and OAuth token endpoints stay public.
-      if((path==='/authorize'||path==='/admin'||path.startsWith('/admin/')) && !(await accessIdentity(request,env))) return accessDenied(request);
+      // Cloudflare Access protects browser routes; local TOTP remains the
+      // default until independent Access MFA has been verified and activated.
+      if(path==='/authorize'||path==='/admin'||path.startsWith('/admin/')){
+        const isMfaOnly=cloudflareMfaOnly(env);
+        if(!(await accessIdentity(request,env)))return accessDenied(request,isMfaOnly);
+      }
       const metadataServer=serverForMetadata(path);
       if(metadataServer)return protectedMetadata(env,metadataServer);
       if(path==='/.well-known/oauth-authorization-server')return serverMetadata(env);

@@ -7,6 +7,7 @@ import {BRAND_NAME,BRAND_HEAD,BRAND_HEADER} from './brand.ts';
 import {rateLimit} from './oauth.ts';
 import {accessIdentity} from './access.ts';
 import {verifyTotp} from './totp.ts';
+import {cloudflareMfaOnly} from './auth-mode.ts';
 import {revokeClientTokens} from './tokens.ts';
 import {renderAdminLogin,renderAdminDocument,renderClientRow,renderPendingRow,renderConnectionRow,renderRunnerSection} from './i18n/zh-CN.ts';
 import {adminProvisionRunner,adminRevokeRunner,listRunners} from './control/runner-registry.ts';
@@ -39,18 +40,37 @@ export async function getSession(request: Request,env: Env): Promise<AdminSessio
   }catch{return null;}
 }
 function redirect(path: string,headers: Record<string, string>={}){return new Response(null,{status:303,headers:{'Location':path,'Cache-Control':'no-store',...headers}});}
+async function issueAdminSession(env: Env,subject: string): Promise<{session:AdminSession;cookie:string}> {
+  const session: AdminSession={exp:now()+1800,csrf:randomId()};
+  const body=b64u(encoder.encode(JSON.stringify({...session,sub:subject})));
+  const value=body+'.'+await sign(env,body);
+  return {session,cookie:`${COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=1800`};
+}
 export async function adminLogin(request: Request,env: Env): Promise<Response> {
+  // Cloudflare MFA mode has no local password or OTP login endpoint.
+  if(cloudflareMfaOnly(env)) return json({error:'Login is managed by Cloudflare Access'},405);
   if(!originOk(request))return json({error:'Forbidden'},403);
   if(!(await rateLimit(env,request,'admin-login',15)))return json({error:'Rate limited'},429);
   const subject=await accessIdentity(request,env);
   if(!subject)return json({error:'Cloudflare Access required'},403);
   const p=await form(request);
   if(!(await verifyTotp(env,request,p.get('totp_code')||'')))return html('<p>动态验证码错误、过期或已使用。</p>',403);
-  const data={exp:now()+1800,csrf:randomId(),sub:subject};const body=b64u(encoder.encode(JSON.stringify(data)));const value=body+'.'+await sign(env,body);
-  return redirect('/admin',{'Set-Cookie':`${COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=1800`});
+  const issued=await issueAdminSession(env,subject);
+  return redirect('/admin',{'Set-Cookie':issued.cookie});
 }
 export async function adminPage(request: Request,env: Env): Promise<Response> {
-  const session=await getSession(request,env);if(!session)return locked();
+  let session=await getSession(request,env);
+  let sessionCookie: string|undefined;
+  if(!session && cloudflareMfaOnly(env)){
+    // Signed Access identity is still mandatory; the dedicated Admin cookie
+    // binds a short-lived CSRF nonce and cannot replace Access authorization.
+    const subject=await accessIdentity(request,env);
+    if(!subject)return json({error:'Cloudflare Access required'},403);
+    const issued=await issueAdminSession(env,subject);
+    session=issued.session;
+    sessionCookie=issued.cookie;
+  }
+  if(!session)return locked();
   const {results=[]}=await env.MCP_DB.prepare('SELECT owner,owner_kind,enabled,updated_at FROM github_connections ORDER BY owner').all();
   const clients=(await env.MCP_DB.prepare('SELECT client_id,client_name,redirect_uris,approved,allowed_owners,allow_write,allowed_resources,allowed_tools FROM oauth_clients ORDER BY created_at DESC LIMIT 100').all()).results||[];
   const catalog=policyCatalog(env);
@@ -67,7 +87,9 @@ export async function adminPage(request: Request,env: Env): Promise<Response> {
   }).join('');
   const page=renderAdminDocument({session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,rows,clientRows,pendingRows});
   const runnerSection=renderRunnerSection(runnerRows);
-  return html(page.replace('</main>',runnerSection+'</main>'));
+  return html(page.replace('</main>',runnerSection+'</main>'),200,
+    sessionCookie?{'Set-Cookie':sessionCookie}:{});
+
 }
 async function guard(request: Request,env: Env): Promise<AdminSession | null> {
   const session=await getSession(request,env);if(!session||!originOk(request))return null;
@@ -187,7 +209,10 @@ export async function adminRoute(request: Request,env: Env): Promise<Response> {
     if(!originOk(request))return json({error:'Forbidden'},403);
     const p=await form(request);const s=await getSession(request,env);
     if(!s||!(await equals(p.get('csrf')||'',s.csrf)))return json({error:'Forbidden'},403);
-    return redirect('/admin',{'Set-Cookie':`${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`});
+    // Without a local login form, logging out must also clear the Access
+    // session or the next GET would silently create a new local session.
+    return redirect(cloudflareMfaOnly(env)?'/cdn-cgi/access/logout':'/admin',
+      {'Set-Cookie':`${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`});
   }
   if(path==='/admin'&&request.method==='GET')return adminPage(request,env);
   if(path.startsWith('/admin/api/'))return adminApi(request,env,path);
