@@ -60,5 +60,12 @@ export function createRunnerRuntimeTaskPort({ origin, runnerRuntimeToken, transp
     async cancellationRequested(offer) {
       await post('/runtime/v1/tasks/cancel', offer);
     },
+    async fenceTask(offer) {
+      const response = await post('/runtime/v1/tasks/fence', offer);
+      if (!['outcome_uncertain','reconciliation_pending'].includes(response.status)) {
+        throw new Error('runtime_fence_not_confirmed');
+      }
+      return response;
+    },
   };
 }
