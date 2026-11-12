@@ -62,19 +62,19 @@ test('Hub admin and GitHub admin expose separate views without weakening Access 
     const hub=await worker.fetch(authed('/admin'),env);
     assert.equal(hub.status,200,await hub.clone().text());
     const hubHtml=await hub.text();
-    assert.match(hubHtml,/Hub 管理中心/);
+    assert.ok(hubHtml.includes('Hub 管理中心'));
     assert.match(hubHtml,/href="\/github\/admin"/);
-    assert.match(hubHtml,/授权 MCP 客户端/);
+    assert.ok(hubHtml.includes('授权 MCP 客户端'));
     assert.doesNotMatch(hubHtml,/id="add"/,'service credentials are not part of the global Hub dashboard');
-    assert.doesNotMatch(hubHtml,/非 GitHub 官方 MCP Server/,'service disclaimer stays inside its module');
+    assert.ok(!hubHtml.includes('非 GitHub 官方 MCP Server'),'service disclaimer stays inside its module');
 
     const github=await worker.fetch(authed('/github/admin'),env);
     assert.equal(github.status,200,await github.clone().text());
     const githubHtml=await github.text();
-    assert.match(githubHtml,/GitHub 服务管理/);
+    assert.ok(githubHtml.includes('GitHub 服务管理'));
     assert.match(githubHtml,/GitHub Token/);
     assert.match(githubHtml,/id="add"/);
-    assert.match(githubHtml,/非 GitHub 官方 MCP Server/);
+    assert.ok(githubHtml.includes('非 GitHub 官方 MCP Server'));
     assert.match(githubHtml,/href="\/admin"/);
     assert.doesNotMatch(githubHtml,/id="runner-add"/);
     assert.doesNotMatch(githubHtml,/id="rekey"/);
