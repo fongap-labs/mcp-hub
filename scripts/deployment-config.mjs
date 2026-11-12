@@ -24,9 +24,12 @@ export function loadDeployConfig(env) {
   const accessIssuer = required('MCP_ACCESS_ISSUER');
   const accessAud = required('MCP_ACCESS_AUD');
   const buildSha = required('DEPLOY_SOURCE_SHA');
-  const writeMode = String(env.GMC_WRITE_MODE ?? 'disabled');
-  const contentMode = String(env.GMC_CONTENT_MODE ?? 'disabled');
-  const oauthTtl = String(env.MCP_OAUTH_TTL ?? '900');
+  // Empty GitHub Actions Variables are treated as unset for optional settings.
+  // Keep explicit non-empty values subject to the strict checks below.
+  const optional = (name, fallback) => String(env[name] ?? '').trim() || fallback;
+  const writeMode = optional('GMC_WRITE_MODE', 'disabled');
+  const contentMode = optional('GMC_CONTENT_MODE', 'disabled');
+  const oauthTtl = optional('MCP_OAUTH_TTL', '900');
   const environment = String(env.DEPLOY_ENVIRONMENT ?? 'production');
   if (account && !/^[a-f0-9]{32}$/i.test(account)) errors.push('CLOUDFLARE_ACCOUNT_ID_SECONDARY must be a 32-character account ID');
   if (token && token.length < 8) errors.push('CLOUDFLARE_API_TOKEN_SECONDARY is invalid');
