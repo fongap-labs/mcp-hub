@@ -139,6 +139,29 @@ export async function adminApi(request: Request,env: Env,path: string): Promise<
     }
     return json({ok:true});
   }
+  if(path==='/admin/api/client-delete'){
+    let data;try{data=await bodyJson(request,1024);}catch{return json({error:'Invalid request'},400);}
+    const clientId=data.clientId;
+    if(typeof clientId!=='string'||!/^mcp_[A-Za-z0-9_-]{43}$/.test(clientId)||
+      data.confirmClientId!==clientId)return json({error:'Confirm the exact client ID before deletion'},400);
+    const client=await env.MCP_DB.prepare('SELECT client_id FROM oauth_clients WHERE client_id=?').bind(clientId).first();
+    if(!client)return json({error:'Client not found'},404);
+    // Do not delete a client while its approved write is still running.
+    const processing=await env.MCP_DB.prepare("SELECT id FROM approval_requests WHERE client_id=? AND status='processing' LIMIT 1").bind(clientId).first();
+    if(processing)return json({error:'A client write operation is still processing; retry after it completes'},409);
+    // D1 executes this batch atomically, leaving no usable credentials after
+    // deletion. Preserve historical write audit records, deny pending writes.
+    await env.MCP_DB.batch([
+      env.MCP_DB.prepare("UPDATE approval_requests SET status='denied' WHERE client_id=? AND status='pending'").bind(clientId),
+      env.MCP_DB.prepare('DELETE FROM oauth_refresh_tokens WHERE client_id=?').bind(clientId),
+      env.MCP_DB.prepare('DELETE FROM oauth_access_tokens WHERE client_id=?').bind(clientId),
+      env.MCP_DB.prepare('DELETE FROM oauth_codes WHERE client_id=?').bind(clientId),
+      env.MCP_DB.prepare('DELETE FROM oauth_auth_requests WHERE client_id=?').bind(clientId),
+      env.MCP_DB.prepare('DELETE FROM oauth_grants WHERE client_id=?').bind(clientId),
+      env.MCP_DB.prepare('DELETE FROM oauth_clients WHERE client_id=?').bind(clientId),
+    ]);
+    return json({ok:true,deleted:true});
+  }
   if(path==='/admin/api/client-approval'){
     let data;try{data=await bodyJson(request,32768);}catch{return json({error:'Invalid request'},400);}
     if(typeof data.clientId!=='string'||data.clientId.length>100)return json({error:'Invalid client'},400);
