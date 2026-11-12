@@ -42,7 +42,7 @@ export async function verifiedIngestionPublicJwk(env: Env): Promise<JsonWebKey> 
  * fail closed when either secret is missing or malformed. */
 export async function runtimeCryptoReady(env: Env): Promise<boolean> {
   try {
-    if (!env.MCP_ACTIVE_ID || !/^[\\w-]{1,32}$/.test(env.MCP_ACTIVE_ID)) return false;
+    if (!env.MCP_ACTIVE_ID || !/^[A-Za-z0-9_-]{1,32}$/.test(env.MCP_ACTIVE_ID)) return false;
     await aesKey(env,env.MCP_ACTIVE_ID,'encrypt');
     await verifiedIngestionPublicJwk(env);
     return true;
