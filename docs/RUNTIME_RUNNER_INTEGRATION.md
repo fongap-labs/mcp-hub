@@ -140,3 +140,6 @@ const handoff = await claimRunnerTask(hubRunnerClient, privatePort);
 claimRunnerTask accepts the Hub lease before calling Runtime. The task body and execution result remain inside Runtime. If the client disconnects after acceptance or during execution, **never automatically call execute again**: inspect the persisted task journal and Hub reconciliation first. A 202 reconciliation_pending response means the executor has already finished and its result is durable, not that re-execution is allowed.
 
 Tests: tests/runtime-authenticated-executor.test.js exercise a real localhost HTTP listener and SQLite journal with an injected test executor. They do not validate an actual Delta Coding Engine or production GitHub execution. Neither Cloudflare nor Action Worker's credentials or deployment configuration are changed.
+
+
+The opt-in separate-process Runner and fixed-tool Claude Code CLI backend are documented in [Local Coding Runner](LOCAL_CODING_RUNNER.md). An authenticated task producer and real GitHub E2E acceptance are still required; the existing Hub/Action Worker actor policy remains unchanged.

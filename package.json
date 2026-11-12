@@ -17,7 +17,9 @@
     "cf:secrets": "node scripts/with-secondary-cloudflare.mjs secret bulk .secrets.json",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "validate": "npm run check && npm test",
-    "check:deploy": "node scripts/deployment-config.mjs preflight"
+    "check:deploy": "node scripts/deployment-config.mjs preflight",
+    "runtime:trusted": "node --experimental-strip-types --experimental-sqlite runtime/start-trusted-runtime.mjs",
+    "runtime:runner": "node --experimental-strip-types --experimental-sqlite runtime/start-coding-runner.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.44.0",

@@ -172,17 +172,25 @@ test('expired lease or cancelled Hub assignment fails closed before execution', 
   }
 });
 
-test('executor failure is encrypted and reported without leaking its exception', async () => {
+test('executor failure holds potentially changed files for manual review, without leaking secrets', async () => {
   const env = wrapper();
-  const runtime = await start(env, { async execute() { throw Error('private execution exception'); } });
+  let attempts = 0;
+  const runtime = await start(env, { async execute() {
+    attempts++;
+    throw Error('private execution exception');
+  } });
   try {
     const response = await sendRaw(runtime.origin, '/runtime/v1/tasks/execute');
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 202);
     const body = await response.text();
-    assert.match(body, /failed/);
+    assert.match(body, /outcome_uncertain/);
     assert.ok(!body.includes('private'));
-    assert.deepEqual(env.journal.result(taskRef), { errorCode: 'coding_executor_failed' });
-    assert.deepEqual(env.hub.commits.map(x => x.state), ['running', 'failed']);
+    assert.equal(env.journal.recoveryPlan()[0].state, 'uncertain');
+    assert.equal(env.journal.recoveryPlan()[0].requiresReview, true);
+    assert.deepEqual(env.hub.commits.map(x => x.state), ['running', 'side_effects_uncertain']);
+    const repeated = await sendRaw(runtime.origin, '/runtime/v1/tasks/execute');
+    assert.equal(repeated.status, 409);
+    assert.equal(attempts, 1);
   } finally { await runtime.stop(); env.close(); }
 });
 

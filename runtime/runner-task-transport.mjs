@@ -50,7 +50,7 @@ export function createRunnerRuntimeTaskPort({ origin, runnerRuntimeToken, transp
     let data;
     try { data = JSON.parse(text); } catch { throw new Error('runtime_handoff_invalid_response'); }
     if (!data || data.dispatchId !== body.dispatchId ||
-        !['completed','failed','reconciliation_pending','cancel_recorded'].includes(data.status)) {
+        !['completed','failed','reconciliation_pending','cancel_recorded','outcome_uncertain'].includes(data.status)) {
       throw new Error('runtime_handoff_invalid_response');
     }
     return { status: data.status, dispatchId: data.dispatchId };

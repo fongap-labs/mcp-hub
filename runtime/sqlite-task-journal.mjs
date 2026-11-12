@@ -171,6 +171,19 @@ export class RuntimeTaskJournal {
       return this.#transition(taskRef, 'started', outcome, ',encrypted_result=?', [sealed]);
     });
   }
+  /** A failed/aborted engine may have performed side effects. Hold, never replay. */
+  markExecutionUncertain(taskRef, runnerId, leaseId) {
+    valid(taskRef, REF, 'task_ref'); valid(runnerId, RUNNER, 'runner_id');
+    valid(leaseId, LEASE, 'lease_id');
+    return this.#tx(() => {
+      const row = this.#row(taskRef);
+      if (row.runner_id !== runnerId || row.lease_id !== leaseId) {
+        throw new Error('runtime_lease_not_authorized');
+      }
+      return this.#transition(taskRef, 'started', 'uncertain');
+    });
+  }
+
   requestCancellation(taskRef) {
     valid(taskRef, REF, 'task_ref');
     return this.#tx(() => {

@@ -143,7 +143,6 @@ function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, e
         // Claimed/started tasks remain held for explicit recovery, never replay.
         return send(res, 503, { error: 'runtime_execution_not_started_or_uncertain' });
       }
-      let state = 'completed';
       let result;
       try {
         result = await executor.execute(task, {
@@ -153,12 +152,17 @@ function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, e
         });
         if (result === undefined) result = { ok: true };
       } catch {
-        state = 'failed';
-        result = { errorCode: 'coding_executor_failed' };
+        // CLI failures, timeouts and cancellation may happen AFTER a file edit.
+        // Never classify these as "not started" or safe to replay.
+        try { journal.markExecutionUncertain(offer.taskRef, runnerId, offer.leaseId); }
+        catch { return send(res, 409, { error: 'runtime_outcome_uncertain' }); }
+        try { await flushRuntimeReconciliations({ journal, runtimeClient }); }
+        catch { return send(res, 202, { status: 'reconciliation_pending', dispatchId: offer.dispatchId }); }
+        return send(res, 202, { status: 'outcome_uncertain', dispatchId: offer.dispatchId });
       }
       // A concurrent cancellation can make completion ambiguous. Do not
       // overwrite its hold state or claim success in that case.
-      try { journal.complete(offer.taskRef, runnerId, offer.leaseId, state, result); }
+      try { journal.complete(offer.taskRef, runnerId, offer.leaseId, 'completed', result); }
       catch { return send(res, 409, { error: 'runtime_outcome_uncertain' }); }
 
       try { await flushRuntimeReconciliations({ journal, runtimeClient }); }
@@ -166,7 +170,7 @@ function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, e
         // Outcome was durably recorded. A retry must NOT run it again.
         return send(res, 202, { status: 'reconciliation_pending', dispatchId: offer.dispatchId });
       }
-      return send(res, 200, { status: state, dispatchId: offer.dispatchId });
+      return send(res, 200, { status: 'completed', dispatchId: offer.dispatchId });
     } finally {
       active.delete(offer.dispatchId);
     }
