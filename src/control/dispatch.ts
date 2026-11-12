@@ -58,7 +58,7 @@ export async function createDispatch(request: Request, env: Env): Promise<Respon
     const inserted = await stmt(env, `INSERT INTO runner_dispatches(
       dispatch_id,idempotency_key,task_ref,resource_key,required_capabilities_json,priority,quota_key,lease_seconds,status,created_at
     ) VALUES(?,?,?,?,?,?,?,?,'queued',?) ON CONFLICT(idempotency_key) DO NOTHING
-      RETURNING dispatch_id,status`, dispatchId, dispatch.idempotencyKey, dispatch.taskRef, dispatch.resourceKey,
+      RETURNING *`, dispatchId, dispatch.idempotencyKey, dispatch.taskRef, dispatch.resourceKey,
       JSON.stringify(dispatch.requiredCapabilities), dispatch.priority, dispatch.quotaKey, dispatch.leaseSeconds, at).first();
     const row = dbRow(inserted) || dbRow(await stmt(env,
       'SELECT * FROM runner_dispatches WHERE idempotency_key=?', dispatch.idempotencyKey).first());
