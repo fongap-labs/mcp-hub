@@ -79,7 +79,9 @@ function wrapper() {
   env.hub = mockHub();
   return env;
 }
-function sendRaw(origin, path, data = offer, token = runtimeRunnerToken, headers = {}) {
+function sendRaw(origin, path, data = {
+  dispatchId, taskRef, resourceKey, leaseId,
+}, token = runtimeRunnerToken, headers = {}) {
   return fetch(origin + path, {
     method: 'POST', headers: { Authorization: 'Bearer ' + token,
       'Content-Type': 'application/json', ...headers },
@@ -101,7 +103,7 @@ test('Runner handoff triggers authenticated Runtime executor once without disclo
     return { changeCount: 3, internalResult: 'secret result' };
   } });
   try {
-    const port = createRunnerRuntimeTaskPort({ origin: runtime.origin, runnerRuntimeToken });
+    const port = createRunnerRuntimeTaskPort({ origin: runtime.origin, runnerRuntimeToken: runtimeRunnerToken });
     const runner = {
       async next() { return { action: 'offer', dispatch: offer }; },
       async accept(d, l) { assert.equal(d, dispatchId); assert.equal(l, leaseId); return { ok: true }; },
@@ -204,7 +206,7 @@ test('cancellation route requires accepted Hub ownership and never exposes task'
   const runtime = await start(env, { async execute() { calls++; } });
   try {
     const port = createRunnerRuntimeTaskPort({
-      origin: runtime.origin, runnerRuntimeToken,
+      origin: runtime.origin, runnerRuntimeToken: runtimeRunnerToken,
     });
     await port.cancellationRequested(offer);
     assert.equal(env.journal.recoveryPlan()[0].state, 'cancelled');
@@ -243,10 +245,10 @@ test('loopback-only listener and transport reject unsafe origins and credentials
       executor: { async execute() {} },
     }, 0, '0.0.0.0'), /runtime_loopback_only/);
     assert.throws(() => createRunnerRuntimeTaskPort({
-      origin: 'http://remote.example', runnerRuntimeToken,
+      origin: 'http://remote.example', runnerRuntimeToken: runtimeRunnerToken,
     }), /runtime_service_origin_invalid/);
     assert.throws(() => createRunnerRuntimeTaskPort({
-      origin: 'https://example.com/evil', runnerRuntimeToken,
+      origin: 'https://example.com/evil', runnerRuntimeToken: runtimeRunnerToken,
     }), /runtime_service_origin_invalid/);
     assert.throws(() => createRunnerRuntimeTaskPort({
       origin: 'https://example.com', runnerRuntimeToken: 'short',
