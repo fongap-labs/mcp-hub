@@ -1,11 +1,21 @@
 import type {Env} from './types.ts';
-import {cookie,unb64u} from './util.ts';
+import {cookie,unb64u,sha} from './util.ts';
 
 interface AccessClaims { iss?: string; aud?: string|string[]; exp?: number; nbf?: number; sub?: string; email?: string; }
 interface JwtHeader { alg?: string; kid?: string; }
 type AccessJwk = JsonWebKey & { kid?: string };
 interface JwkSet { keys?: AccessJwk[]; }
 const cache = new Map<string,{expires:number;keys:AccessJwk[]}>();
+// A binding is recorded only after the Cloudflare-supplied Worker context
+// proves the exact allowed audience and returns a verified user identity.
+// The binding is request-local and never derived from caller-supplied headers.
+const nativeBindings = new WeakMap<Request,{issuer:string;aud:string;subject:string}>();
+export interface WorkerAccessContext {
+  access?: {
+    aud: string;
+    getIdentity(): Promise<{email?:string}|null>;
+  };
+}
 
 // RFC 6265 permits quoted Cookie values. Only strip the exact wrapper;
 // the resulting JWT must pass the same signature and claim verification.
@@ -36,10 +46,36 @@ async function loadKeys(issuer: string): Promise<AccessJwk[]> {
   return keys;
 }
 
+// Prefer the trusted native identity for a Worker invocation already
+// authenticated by Cloudflare Access. The context is provided by the
+// platform, never extracted from user-controlled request headers.
+export async function accessIdentityFromWorker(
+  request: Request,env: Env,ctx?: WorkerAccessContext
+): Promise<string|null> {
+  if(!ctx?.access)return accessIdentity(request,env);
+  try {
+    const config=accessConfig(env);
+    if(!config || !config.audiences.includes(ctx.access.aud))return null;
+    const identity=await ctx.access.getIdentity();
+    const email=identity?.email?.trim().toLowerCase()||'';
+    if(email.length<3||email.length>254||!/^[^\\s@]+@[^\\s@]+$/.test(email))return null;
+    // Do not expose an email address in the browser-readable signed
+    // session body. Native identity is scoped to the exact Access audience.
+    const subject='cf:'+await sha(email);
+    nativeBindings.set(request,{issuer:config.issuer,aud:ctx.access.aud,subject});
+    return subject;
+  }catch{return null;}
+}
+
 // Fail closed if Access is missing or misconfigured. Never trust an unsigned assertion.
 export async function accessIdentity(request: Request,env: Env): Promise<string|null> {
   try {
     const config=accessConfig(env);
+    const native=nativeBindings.get(request);
+    if(native){
+      return config && native.issuer===config.issuer && config.audiences.includes(native.aud)
+        ? native.subject : null;
+    }
     // Access normally injects the assertion header. For browser requests it
     // may instead forward the application-scoped CF_Authorization cookie.
     // Never fall back if a header is present but invalid: this prevents an
