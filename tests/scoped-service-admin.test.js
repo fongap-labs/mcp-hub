@@ -32,12 +32,12 @@ function makeDb(){
 }
 
 test('service admin paths resolve only registered modules, not arbitrary path segments',()=>{
-  assert.equal(moduleForAdminPath('/github/admin')?.id,'github');
-  assert.equal(moduleForAdminPath('/github/admin/')?.id,'github');
+  assert.equal(moduleForAdminPath('/admin/github')?.id,'github');
+  assert.equal(moduleForAdminPath('/admin/github/')?.id,'github');
   for(const path of [
-    '/unknown/admin','/admin','/github','/github/admin/api/status',
-    '/github/admin/other','/github%2Fadmin','/github/administer',
-    '/x/../github/admin'
+    '/unknown/admin','/admin','/github','/github/admin','/github/admin/',
+    '/admin/unknown','/admin/github/api/status','/admin/github/other',
+    '/admin%2Fgithub','/admin/githubister','/x/../admin/github'
   ])assert.equal(moduleForAdminPath(path),undefined,path);
 });
 
@@ -55,7 +55,7 @@ test('Hub admin and GitHub admin expose separate views without weakening Access 
     'Cf-Access-Jwt-Assertion':fixture.assertion,'Accept':'text/html'
   }});
   try {
-    const denied=await worker.fetch(new Request(origin+'/github/admin',{headers:{Accept:'text/html'}}),env);
+    const denied=await worker.fetch(new Request(origin+'/admin/github',{headers:{Accept:'text/html'}}),env);
     assert.equal(denied.status,403);
     assert.match(await denied.text(),/Cloudflare Access/);
 
@@ -63,12 +63,12 @@ test('Hub admin and GitHub admin expose separate views without weakening Access 
     assert.equal(hub.status,200,await hub.clone().text());
     const hubHtml=await hub.text();
     assert.ok(hubHtml.includes('Hub 管理中心'));
-    assert.match(hubHtml,/href="\/github\/admin"/);
+    assert.match(hubHtml,/href="\/admin\/github"/);
     assert.ok(hubHtml.includes('授权 MCP 客户端'));
     assert.doesNotMatch(hubHtml,/id="add"/,'service credentials are not part of the global Hub dashboard');
     assert.ok(!hubHtml.includes('非 GitHub 官方 MCP Server'),'service disclaimer stays inside its module');
 
-    const github=await worker.fetch(authed('/github/admin'),env);
+    const github=await worker.fetch(authed('/admin/github'),env);
     assert.equal(github.status,200,await github.clone().text());
     const githubHtml=await github.text();
     assert.ok(githubHtml.includes('GitHub 服务管理'));
@@ -79,9 +79,20 @@ test('Hub admin and GitHub admin expose separate views without weakening Access 
     assert.doesNotMatch(githubHtml,/id="runner-add"/);
     assert.doesNotMatch(githubHtml,/id="rekey"/);
 
-    assert.equal((await worker.fetch(authed('/github/admin/'),env)).status,200);
+    assert.equal((await worker.fetch(authed('/admin/github/'),env)).status,200);
+    // No compatibility route or redirect for the retired address.
+    for(const oldPath of ['/github/admin','/github/admin/']){
+      const old=await worker.fetch(authed(oldPath),env);
+      assert.equal(old.status,404,oldPath);
+      assert.equal(old.headers.get('Location'),null);
+    }
+    // The new nested path uses exactly the Hub's existing Access gate.
+    const deniedNested=await worker.fetch(new Request(origin+'/admin/github',{
+      headers:{Accept:'text/html'}
+    }),env);
+    assert.equal(deniedNested.status,403);
     assert.equal((await worker.fetch(authed('/unknown/admin'),env)).status,404);
-    assert.equal((await worker.fetch(authed('/github/admin/api/delete'),env)).status,404);
+    assert.equal((await worker.fetch(authed('/admin/github/api/delete'),env)).status,404);
     assert.equal((await worker.fetch(authed('/github'),env)).status,401,
       'The existing GitHub MCP resource remains a separate OAuth-protected endpoint');
     const js=await worker.fetch(authed('/admin/app.js'),env);
