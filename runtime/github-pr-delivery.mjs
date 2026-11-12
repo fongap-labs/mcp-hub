@@ -65,6 +65,7 @@ export function createAuthorizedGithubDelivery({
         reject(400, 'invalid_delivery_request');
       }
       const taskRef = body.taskRef;
+      const token = userToken(authorization);
       if (inFlight.has(taskRef)) reject(409, 'delivery_already_running');
       inFlight.add(taskRef);
       try {
@@ -76,7 +77,6 @@ export function createAuthorizedGithubDelivery({
         if (!SHA.test(task.sourceSha) ||
             !Object.hasOwn(workspaceRoots, task.repository) ||
             !approvedActors.has(task.authorizedActorId)) reject(403, 'delivery_not_authorized');
-        const token = userToken(authorization);
         const user = await request(githubFetch, '/user', token);
         if (user.type !== 'User' || user.id !== task.authorizedActorId ||
             typeof user.login !== 'string' ||
