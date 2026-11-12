@@ -22,6 +22,9 @@ test('Access permits a signed application cookie only when the assertion header 
     const signedCookie=new Request(origin+'/admin',{headers:{Cookie:cookie}});
     const signedHeader=new Request(origin+'/admin',{headers:{'Cf-Access-Jwt-Assertion':auth.assertion}});
     assert.equal(await accessIdentity(signedCookie,env),'admin-identity');
+    const quotedCookie=new Request(origin+'/admin',{headers:{Cookie:'CF_Authorization="'+auth.assertion+'"'}});
+    assert.equal(await accessIdentity(quotedCookie,env),'admin-identity');
+    assert.equal((await worker.fetch(quotedCookie,env)).status,200);
     assert.equal(await accessIdentity(signedHeader,env),'admin-identity');
     assert.equal((await worker.fetch(signedCookie,env)).status,200);
     const login=await worker.fetch(signedHeader,env);
@@ -38,6 +41,12 @@ test('Access permits a signed application cookie only when the assertion header 
     assert.equal(await accessIdentity(new Request(origin+'/admin',{
       headers:{Cookie:'CF_Authorization=unsigned.fake.token'}
     }),env),null,'Unsigned or forged cookies are rejected');
+    assert.equal(await accessIdentity(new Request(origin+'/admin',{
+      headers:{Cookie:'CF_Authorization="malformed.jwt"'}
+    }),env),null,'Malformed quoted cookies cannot bypass Access validation');
+    assert.equal(await accessIdentity(new Request(origin+'/admin',{
+      headers:{Cookie:'CF_Authorization="'+auth.assertion+'"','Cf-Access-Jwt-Assertion':'invalid'}
+    }),env),null,'Invalid assertion header remains authoritative over quoted Cookie');
     assert.equal(await accessIdentity(new Request(origin+'/admin',{
       headers:{Cookie:'CF_Authorization='}
     }),env),null,'Missing cookies fail closed');
