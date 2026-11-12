@@ -5,6 +5,19 @@ export const GATEWAY_DISCLAIMER = '独立开发的多账号 MCP 网关 · 非 Gi
 export const OAUTH_TITLE = 'MCP 连接授权';
 export const OAUTH_DENIED_TITLE = '认证失败';
 export const OAUTH_DENIED_BODY = '<p>动态验证码错误、过期或已使用。</p>';
+
+// This copy is shown only when Cloudflare Access authentication did not pass.
+// It deliberately does not attempt a Worker-side Access login or grant access.
+export function renderAccessDenied(): string {
+  return `<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP Hub · 身份验证未完成</title></head><body><main>
+<h1>需要 Cloudflare Access 身份验证</h1>
+<p>请先完成 Cloudflare Access 登录，然后再输入手机验证器的 6 位动态验证码。</p>
+<p>若已经登录仍看到此页面，请联系管理员检查 Access 应用的路径范围和 Audience（AUD）配置。</p>
+<p><a href="/admin">重新检查管理后台登录</a></p>
+</main></body></html>`;
+}
+
 export const ADMIN_BROWSER_COPY = {
   missingPublicKey: '无法取得加密公钥',
   requestFailed: '操作失败',
