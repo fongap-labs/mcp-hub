@@ -1,6 +1,6 @@
 import type { Env, AdminSession, McpAuth } from './types.ts';
 import {now,b64u,unb64u,encoder,randomId,equals,cookie,originOk,form,bodyJson,json,html,escapeHtml,validOwner} from './util.ts';
-import {ingestionPublicJwk,decryptIngested,seal,unseal} from './crypto.ts';
+import {verifiedIngestionPublicJwk,decryptIngested,seal,unseal} from './crypto.ts';
 import {apiFetch,githubPath,getOwnerToken,PublicError} from './github.ts';
 import {ADMIN_SCRIPT,ADMIN_CSS} from './admin-ui.ts';
 import {BRAND_NAME,BRAND_HEAD,BRAND_HEADER} from './brand.ts';
@@ -111,12 +111,7 @@ export async function adminApi(request: Request,env: Env,path: string): Promise<
     // A deployed Secret can exist but still contain a malformed or non-private
     // JWK. Fail with a specific safe status instead of an opaque Worker 500.
     try {
-      const publicJwk=ingestionPublicJwk(env);
-      await crypto.subtle.importKey('jwk',JSON.parse(env.MCP_INGEST_JWK) as JsonWebKey,
-        {name:'RSA-OAEP',hash:'SHA-256'},false,['decrypt']);
-      await crypto.subtle.importKey('jwk',publicJwk,
-        {name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt']);
-      return json(publicJwk,200,{'Cache-Control':'no-store'});
+      return json(await verifiedIngestionPublicJwk(env),200,{'Cache-Control':'no-store'});
     }catch{
       // No private key bytes, key IDs or raw parsing details in HTTP errors.
       return json({error:'ingestion_public_key_unavailable'},503,{'Cache-Control':'no-store'});
