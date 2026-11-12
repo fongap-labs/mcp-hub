@@ -259,6 +259,24 @@ export class RuntimeTaskJournal {
       return true;
     });
   }
+  /** Trusted Runtime only. Completed, Hub-acknowledged tasks may be delivered
+   * by their original verified GitHub user; older unowned tasks fail closed. */
+  taskForDelivery(taskRef) {
+    valid(taskRef, REF, 'task_ref');
+    const row = this.#row(taskRef);
+    if (row.state !== 'completed' || row.ack_sequence !== row.sequence) {
+      throw new Error('runtime_task_not_deliverable');
+    }
+    const task = unseal(this.#key, row.encrypted_task);
+    if (!task || !Number.isSafeInteger(task.authorizedActorId) ||
+        task.authorizedActorId <= 0 ||
+        typeof task.repository !== 'string' || typeof task.sourceSha !== 'string') {
+      throw new Error('runtime_task_owner_unavailable');
+    }
+    return { repository: task.repository, sourceSha: task.sourceSha,
+      authorizedActorId: task.authorizedActorId };
+  }
+
   result(taskRef) {
     valid(taskRef, REF, 'task_ref');
     const row = this.#row(taskRef);
