@@ -56,10 +56,22 @@ export async function flushRuntimeReconciliations({ journal, runtimeClient }) {
   for (const item of journal.recoveryPlan()) {
     if (!item.report) continue;
     const report = item.report;
-    const answer = await runtimeClient.reconcile(report.dispatchId, report.sequence, report.state);
-    if (!answer || answer.ok !== true || answer.dispatchId !== report.dispatchId ||
-        answer.runtimeSequence !== report.sequence || answer.status !== EXPECTED_STATUS[report.state]) {
-      throw new Error('unexpected_runtime_reconciliation');
+    let valid = false;
+    try {
+      const answer = await runtimeClient.reconcile(report.dispatchId, report.sequence, report.state);
+      valid = !!answer && answer.ok === true && answer.dispatchId === report.dispatchId &&
+        answer.runtimeSequence === report.sequence && answer.status === EXPECTED_STATUS[report.state];
+      if (!valid) throw new Error('unexpected_runtime_reconciliation');
+    } catch (error) {
+      // A lost success response or retry 409 is ambiguous. Re-query Hub using
+      // the trusted Runtime key; acknowledge only an EXACT committed match.
+      if (typeof runtimeClient.get !== 'function') throw error;
+      let status;
+      try { status = await runtimeClient.get(report.dispatchId); } catch { throw error; }
+      valid = !!status && status.dispatch_id === report.dispatchId &&
+        status.runtime_sequence === report.sequence && status.runtime_state === report.state &&
+        status.status === EXPECTED_STATUS[report.state];
+      if (!valid) throw error;
     }
     journal.acknowledge(item.taskRef, report.sequence);
     acknowledged.push({ taskRef: item.taskRef, sequence: report.sequence, state: report.state });
