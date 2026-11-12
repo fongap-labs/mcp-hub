@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 修复: Access 允许符合标准的带双引号浏览器授权 Cookie，仍执行完整签名、AUD、Issuer 与有效期校验；无效请求头继续优先拒绝。
+
 - 修复: Access 浏览器登录兼容经签名验证的授权 Cookie，保留请求头优先和无效头拒绝；为浏览器 403 增加清晰提示，不影响 API 与二次 TOTP。
 
 - 修复: 正常部署默认保留 Cloudflare 历史加密密钥；显式确认后才同步已核验的原始 Keyring/JWK，避免 GitHub Secret 已配置但未确认时阻断发布。
