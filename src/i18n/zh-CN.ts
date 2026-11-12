@@ -42,6 +42,16 @@ export function renderClientRow(c: DbRow,escapeHtml: (s: unknown)=>string,catalo
 }
 export function renderPendingRow(r: DbRow,escapeHtml: (s: unknown)=>string){return `<tr><td>${escapeHtml(r.owner+'/'+r.repo)}</td><td><strong>${escapeHtml(r.title)}</strong><div class="muted">${escapeHtml(r.body.slice(0,300))}</div></td><td>${escapeHtml(new Date(r.expires_at*1000).toISOString().slice(11,19))} UTC</td><td><button type="button" class="approve-operation" data-operation="${escapeHtml(r.id)}">审批执行</button> <button type="button" class="deny-operation danger" data-operation="${escapeHtml(r.id)}">拒绝</button></td></tr>`;}
 export function renderConnectionRow(r: DbRow,escapeHtml: (s: unknown)=>string){return `<tr><td>${escapeHtml(r.owner)}</td><td>${escapeHtml(r.owner_kind)}</td><td>${r.enabled?'启用':'停用'}</td><td>${new Date(r.updated_at*1000).toISOString().slice(0,10)}</td><td><button type="button" class="toggle" data-owner="${escapeHtml(r.owner)}" data-enabled="${r.enabled?'0':'1'}">${r.enabled?'停用':'启用'}</button> <button type="button" class="delete danger" data-owner="${escapeHtml(r.owner)}">删除</button></td></tr>`;}
+export function renderServiceDirectoryCard(
+  module:{id:string;description:string;endpoints:readonly {path:string}[]},
+  escapeHtml:(s:unknown)=>string
+):string{
+  const id=escapeHtml(module.id);
+  const endpoints=module.endpoints.map(endpoint=>'<code>'+escapeHtml(endpoint.path)+'</code>').join('、');
+  return `<article class="service-card"><h3>${id} MCP</h3><p>${escapeHtml(module.description)}</p>
+    <p class="muted">服务入口：${endpoints}</p>
+    <a href="/${encodeURIComponent(module.id)}/admin">管理此服务</a></article>`;
+}
 export function renderAdminDocument(
   {session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,clientRows,pendingRows,serviceCards}:
   {session:AdminSession;BRAND_HEAD:string;BRAND_NAME:string;BRAND_HEADER:string;
