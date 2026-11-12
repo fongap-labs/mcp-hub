@@ -52,7 +52,7 @@ export function renderServiceDirectoryCard(
   const endpoints=module.endpoints.map(endpoint=>'<code>'+escapeHtml(endpoint.path)+'</code>').join('、');
   return `<article class="service-card"><h3>${id} MCP</h3><p>${escapeHtml(module.description)}</p>
     <p class="muted">服务入口：${endpoints}</p>
-    <a href="/${encodeURIComponent(module.id)}/admin">管理此服务</a></article>`;
+    <a href="/admin/${encodeURIComponent(module.id)}">管理此服务</a></article>`;
 }
 export function renderAdminDocument(
   {session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,clientRows,pendingRows,serviceCards}:

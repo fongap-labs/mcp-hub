@@ -58,8 +58,12 @@ export default {
       if(path==='/control/dispatch/cancel'&&request.method==='POST')return cancelDispatch(request,env);
       if(path==='/control/dispatch/reconcile'&&request.method==='POST')return reconcileDispatch(request,env);
       if(path==='/authorize')return request.method==='GET'?authorizeGet(request,env):request.method==='POST'?authorizePost(request,env):json({error:'Method not allowed'},405);
+      // Service admin is nested under /admin, so it must be dispatched
+      // before the generic /admin route. Unknown services still return 404.
+      if(serviceAdmin)return request.method==='GET'
+        ? adminPage(request,env,serviceAdmin)
+        : json({error:'Not found'},404);
       if(path==='/admin'||path.startsWith('/admin/'))return await adminRoute(request,env);
-      if(serviceAdmin&&request.method==='GET')return adminPage(request,env,serviceAdmin);
       const mcpServer=serverForPath(path);
       if(mcpServer){
         const auth=await validateMcpToken(request,env,mcpServer);
