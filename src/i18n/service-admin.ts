@@ -15,7 +15,6 @@ interface ServiceAdminView {
 // settings still get an independently protected information page.
 export function renderServiceAdminDocument(view: ServiceAdminView): string {
   const {session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,service,rows}=view;
-  const id=escapeHtml(service.id);
   const displayName=service.id==='github'?'GitHub':service.id;
   const endpointList=service.endpoints.map(e=>
     '<code>'+escapeHtml(e.path)+'</code>'
