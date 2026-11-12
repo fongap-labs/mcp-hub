@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 修复: 全部模块管理路径统一为 `/admin/<service>`（GitHub 为 `/admin/github`）；移除原有 `/github/admin` 路由，不做重定向或兼容层。共享 Hub Access 会话；公共 MCP/OAuth 路径和管理员 API 不变，并补齐路由及鉴权测试。
+
 - 修复: Runner 续租失败、接单响应不确定及退出时主动隔离在途任务；Runtime 独立监控 Hub 租约，失效或断联先持久化不确定状态再中断执行，异常退出保留单实例锁，补齐对应安全回归测试。
 
 - 新增: 已完成并与 Hub 对账的编程任务可由原 GitHub 用户重新授权交付；限制工作树文本改动，使用 GitHub API 创建新任务分支、提交与 PR；沿用中央门禁，拒绝强推与 main 写入，补充故障幂等测试。
