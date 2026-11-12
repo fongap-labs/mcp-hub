@@ -22,7 +22,7 @@ export function gitCommand(cwd, args, { binary = false } = {}) {
   };
   const cleaned = Object.fromEntries(Object.entries(env).filter(([, value]) => typeof value === 'string'));
   try {
-    return execFileSync('git', [
+    const output = execFileSync('git', [
       '-c', 'credential.helper=',
       '-c', 'core.hooksPath=' + nullPath,
       '-c', 'protocol.ext.allow=never',
