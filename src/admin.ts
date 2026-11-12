@@ -10,6 +10,8 @@ import {verifyTotp} from './totp.ts';
 import {cloudflareMfaOnly} from './auth-mode.ts';
 import {revokeClientTokens} from './tokens.ts';
 import {renderAdminLogin,renderAdminDocument,renderClientRow,renderPendingRow,renderConnectionRow,renderRunnerSection} from './i18n/zh-CN.ts';
+import {renderServiceAdminDocument} from './service-admin-ui.ts';
+import type {McpModule} from './gateway/types.ts';
 import {adminProvisionRunner,adminRevokeRunner,listRunners} from './control/runner-registry.ts';
 import {MCP_MODULES,MCP_SERVERS,toolPolicyId} from './gateway/registry.ts';
 
@@ -58,7 +60,7 @@ export async function adminLogin(request: Request,env: Env): Promise<Response> {
   const issued=await issueAdminSession(env,subject);
   return redirect('/admin',{'Set-Cookie':issued.cookie});
 }
-export async function adminPage(request: Request,env: Env): Promise<Response> {
+export async function adminPage(request: Request,env: Env,service?: McpModule): Promise<Response> {
   let session=await getSession(request,env);
   let sessionCookie: string|undefined;
   if(!session && cloudflareMfaOnly(env)){
@@ -71,6 +73,14 @@ export async function adminPage(request: Request,env: Env): Promise<Response> {
     sessionCookie=issued.cookie;
   }
   if(!session)return locked();
+  if(service){
+    const results=service.id==='github'
+      ?(await env.MCP_DB.prepare('SELECT owner,owner_kind,enabled,updated_at FROM github_connections ORDER BY owner').all()).results||[]
+      :[];
+    const serviceRows=results.map(r=>renderConnectionRow(r,escapeHtml)).join('');
+    return html(renderServiceAdminDocument({session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,
+      service,rows:serviceRows}),200,sessionCookie?{'Set-Cookie':sessionCookie}:{});
+  }
   const {results=[]}=await env.MCP_DB.prepare('SELECT owner,owner_kind,enabled,updated_at FROM github_connections ORDER BY owner').all();
   const clients=(await env.MCP_DB.prepare('SELECT client_id,client_name,redirect_uris,approved,allowed_owners,allow_write,allowed_resources,allowed_tools FROM oauth_clients ORDER BY created_at DESC LIMIT 100').all()).results||[];
   const catalog=policyCatalog(env);
@@ -85,7 +95,12 @@ export async function adminPage(request: Request,env: Env): Promise<Response> {
       : `<button type="button" class="revoke-runner danger" data-runner="${escapeHtml(r.runnerId)}">撤销</button>`;
     return `<tr><td><strong>${escapeHtml(r.displayName)}</strong><div><code>${escapeHtml(r.runnerId)}</code></div></td><td>${escapeHtml(r.capabilities.join(', '))}</td><td>${r.activeConcurrency}/${r.maxConcurrency}</td><td>${escapeHtml(r.availability)}</td><td>${escapeHtml(seen)}</td><td>${action}</td></tr>`;
   }).join('');
-  const page=renderAdminDocument({session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,rows,clientRows,pendingRows});
+  const serviceCards=MCP_MODULES.map(module=>({
+    id:module.id,
+    description:module.description,
+    endpointPaths:module.endpoints.map(endpoint=>endpoint.path)
+  }));
+  const page=renderAdminDocument({session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,rows,clientRows,pendingRows,serviceCards});
   const runnerSection=renderRunnerSection(runnerRows);
   return html(page.replace('</main>',runnerSection+'</main>'),200,
     sessionCookie?{'Set-Cookie':sessionCookie}:{});
