@@ -161,7 +161,13 @@ test('GitHub runtime Secret bundle is minimal, validated and never prints values
   const keyring=JSON.stringify({v1:Buffer.alloc(32).toString('base64')});
   const jwk=JSON.stringify({kty:'RSA',d:'test-private-exponent'});
   const crypto={...base,MCP_KEYRING_JSON:keyring,MCP_INGEST_JWK:jwk};
-  assert.throws(()=>selectRuntimeSecrets(crypto),/MCP_CRYPTO_SECRET_SYNC/);
+  // Ordinary deploy must preserve existing Cloudflare crypto Secrets,
+  // whether GitHub has both originals, only one, or neither.
+  assert.deepEqual(selectRuntimeSecrets(crypto),{MCP_TOTP_SECRET:secret});
+  assert.deepEqual(selectRuntimeSecrets({...base,MCP_KEYRING_JSON:keyring}),{MCP_TOTP_SECRET:secret});
+  assert.deepEqual(selectRuntimeSecrets({...base,MCP_INGEST_JWK:jwk}),{MCP_TOTP_SECRET:secret});
+  assert.throws(()=>selectRuntimeSecrets({...crypto,MCP_CRYPTO_SECRET_SYNC:'yes'}),/must be blank or confirmed/);
+  assert.throws(()=>selectRuntimeSecrets({...base,MCP_CRYPTO_SECRET_SYNC:'confirmed'}),/both original keys/);
   assert.throws(()=>selectRuntimeSecrets({...base,MCP_KEYRING_JSON:keyring,MCP_CRYPTO_SECRET_SYNC:'confirmed'}),/both original keys/);
   assert.deepEqual(selectRuntimeSecrets({...crypto,MCP_CRYPTO_SECRET_SYNC:'confirmed'}),{
     MCP_TOTP_SECRET:secret,MCP_KEYRING_JSON:keyring,MCP_INGEST_JWK:jwk});
