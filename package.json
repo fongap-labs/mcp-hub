@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Cloudflare Workers MCP gateway with encrypted, per-owner GitHub tokens and rotating OAuth sessions",
+  "description": "Modular Cloudflare Workers MCP gateway with service-scoped admin and OAuth resources",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

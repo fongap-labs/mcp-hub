@@ -5,8 +5,8 @@ import {accessIdentityFromWorker,type WorkerAccessContext} from './access.ts';
 import {cloudflareMfaOnly} from './auth-mode.ts';
 import {renderAccessDenied} from './i18n/zh-CN.ts';
 import {protectedMetadata,serverMetadata,registerClient,authorizeGet,authorizePost,tokenEndpoint,revokeToken,validateMcpToken,challenge,cleanExpired} from './oauth.ts';
-import {adminRoute} from './admin.ts';
-import {serverForPath,serverForMetadata} from './gateway/registry.ts';
+import {adminRoute,adminPage} from './admin.ts';
+import {serverForPath,serverForMetadata,moduleForAdminPath} from './gateway/registry.ts';
 import {processMcp} from './gateway/router.ts';
 import {heartbeatRunner,registerRunner} from './control/runner-registry.ts';
 import {acceptRunnerDispatch,cancelDispatch,consumeDispatchQueue,createDispatch,getDispatchStatus,maintainDispatches,
@@ -33,9 +33,10 @@ export default {
         return json({status:ready?'ok':'unavailable',ready,build:env.MCP_BUILD_SHA||null,
           dispatchEnabled:Boolean(env.MCP_RUNTIME_KEY&&env.MCP_RUNTIME_KEY.length>=32&&env.MCP_DISPATCH_QUEUE)},ready?200:503);
       }
+      const serviceAdmin=moduleForAdminPath(path);
       // Cloudflare Access protects browser routes; local TOTP remains the
       // default until independent Access MFA has been verified and activated.
-      if(path==='/authorize'||path==='/admin'||path.startsWith('/admin/')){
+      if(path==='/authorize'||path==='/admin'||path.startsWith('/admin/')||serviceAdmin){
         const isMfaOnly=cloudflareMfaOnly(env);
         if(!(await accessIdentityFromWorker(request,env,ctx)))return accessDenied(request,isMfaOnly);
       }
@@ -57,7 +58,8 @@ export default {
       if(path==='/control/dispatch/cancel'&&request.method==='POST')return cancelDispatch(request,env);
       if(path==='/control/dispatch/reconcile'&&request.method==='POST')return reconcileDispatch(request,env);
       if(path==='/authorize')return request.method==='GET'?authorizeGet(request,env):request.method==='POST'?authorizePost(request,env):json({error:'Method not allowed'},405);
-      if(path.startsWith('/admin'))return adminRoute(request,env);
+      if(path==='/admin'||path.startsWith('/admin/'))return adminRoute(request,env);
+      if(serviceAdmin&&request.method==='GET')return adminPage(request,env,serviceAdmin);
       const mcpServer=serverForPath(path);
       if(mcpServer){
         const auth=await validateMcpToken(request,env,mcpServer);

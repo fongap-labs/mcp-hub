@@ -1,4 +1,3 @@
-import {GATEWAY_DISCLAIMER} from '../src/i18n/zh-CN.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.ts';
@@ -33,12 +32,13 @@ test('independent mark and administration UI cannot be confused with official Gi
     assert.equal(login.status,200);
     const html=await login.text();
     assert.match(html,/MCP Hub/);
-    assert.ok(html.includes(GATEWAY_DISCLAIMER));
+    assert.ok(html.includes('通用 MCP 网关'));
+    assert.ok(!html.includes('非 GitHub 官方 MCP Server'));
     assert.match(html,/Fongap Labs/);
     assert.match(html,/v0\.1\.0/);
-    assert.match(html,/\/brand\/icon.svg/);
+    assert.match(html,/<svg[^>]+viewBox="0 0 64 64"/);
     assert.doesNotMatch(html,/<h1>GitHub MCP/);
-    assert.ok(BRAND_NOTE.includes(GATEWAY_DISCLAIMER));
+    assert.ok(BRAND_NOTE.includes('通用 MCP 网关'));
   } finally {globalThis.fetch=originalFetch;}
 });
 

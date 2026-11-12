@@ -49,6 +49,9 @@ Cloudflare Worker
 
 ## 2. Cloudflare Access 与动态码
 
+**管理路径分层**：全局管理中心 `/admin`，单服务管理为 `/<service>/admin`，目前已注册的 GitHub 服务对应 `/github/admin`；服务列表按模块声明自动生成。所有服务级管理请求仍需现有 Access 身份验证及管理员 Session；未知服务拒绝访问。Cloudflare Zero Trust 的 MCP Hub Access 应用应将 `/github/admin`（以及未来新增的服务管理入口）纳入**同一受保护应用、同一 AUD**，否则这类路径可能缺少访问令牌而返回 403。不要启用 Bypass 或 Allow Everyone。原有 `/admin` 及 `/admin/api/*` 保持兼容，现有 `/github` OAuth Resource 和 MCP 客户端无需迁移。
+
+
 生产部署前，先在 Cloudflare Zero Trust → Access → Applications 配置仅允许本人访问的自托管应用，保护以下三个路径：
 
 - `https://mcp.135468.xyz/admin`

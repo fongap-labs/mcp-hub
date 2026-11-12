@@ -47,6 +47,13 @@ export function moduleForId(id: string): McpModule | undefined {
   return MCP_MODULES.find(module => module.id === id);
 }
 
+// Route service administration only for explicitly registered modules.
+// Public MCP /<service> endpoints and OAuth resources are unaffected.
+export function moduleForAdminPath(path: string): McpModule | undefined {
+  const match = /^\/([a-z][a-z0-9-]*)\/admin\/?$/.exec(path);
+  return match ? moduleForId(match[1]!) : undefined;
+}
+
 export function baseOrigin(env: Env): string {
   const url = new URL(env.MCP_PUBLIC_URL);
   if (url.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(url.hostname)) {

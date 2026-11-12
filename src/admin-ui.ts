@@ -1,5 +1,26 @@
 import {ADMIN_BROWSER_COPY} from './i18n/zh-CN.ts';
-export const ADMIN_CSS=`.brand{display:flex;gap:.9rem;align-items:center}.brand-icon{width:44px;height:44px;flex:none}.brand h1{font-size:1.4rem;margin:0}.brand-subtitle{font-size:.8rem;margin:.25rem 0 0;color:GrayText;line-height:1.4}a{color:#286F78}:root{color-scheme:light dark;font-family:system-ui,-apple-system,'Segoe UI',sans-serif}body{margin:0;background:Canvas;color:CanvasText}main{width:min(940px,92vw);margin:5vh auto}h1{font-size:1.8rem}h2{margin-top:2rem}p{line-height:1.6;color:GrayText}header{display:flex;align-items:center;justify-content:space-between}form#add{display:grid;gap:1rem;max-width:580px}label{display:grid;gap:.4rem;margin:.7rem 0}input,select{padding:.7rem;border:1px solid GrayText;border-radius:.4rem;background:Field;color:FieldText;font:inherit}input[type=checkbox]{width:auto}button{cursor:pointer;border:1px solid #286F78;background:#286F78;color:white;border-radius:.4rem;padding:.55rem 1rem;font:inherit}.secondary{background:transparent;color:CanvasText}.danger{background:transparent;border-color:#b3261e;color:#b3261e}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid GrayText;padding:.65rem;text-align:left;word-break:break-word}.muted{font-size:.9rem}#result{white-space:pre-wrap}code{word-break:break-all}details{min-width:220px}summary{cursor:pointer;color:#286F78}form.client-policy{min-width:min(560px,80vw);max-height:65vh;overflow:auto;padding:.6rem}fieldset{margin:.8rem 0;padding:.7rem;border:1px solid GrayText;border-radius:.4rem}.policy-label{margin-top:.7rem;font-weight:600}.policy-option{display:flex;align-items:flex-start;gap:.55rem;margin:.45rem 0}.policy-option input{margin-top:.25rem}.policy-option span{display:grid;gap:.2rem}`;
+export const ADMIN_CSS=`.brand{display:flex;gap:.9rem;align-items:center}.brand-icon{width:44px;height:44px;flex:none}.brand-icon svg{display:block;width:44px;height:44px}.brand-subtitle .version{margin-left:.5rem;color:#286F78;font-size:.75rem}.brand h1{font-size:1.4rem;margin:0}.brand-subtitle{font-size:.8rem;margin:.25rem 0 0;color:GrayText;line-height:1.4}a{color:#286F78}:root{color-scheme:light dark;font-family:system-ui,-apple-system,'Segoe UI',sans-serif}body{margin:0;background:Canvas;color:CanvasText}main{width:min(940px,92vw);margin:5vh auto}h1{font-size:1.8rem}h2{margin-top:2rem}p{line-height:1.6;color:GrayText}header{display:flex;align-items:center;justify-content:space-between}form#add{display:grid;gap:1rem;max-width:580px}label{display:grid;gap:.4rem;margin:.7rem 0}input,select{padding:.7rem;border:1px solid GrayText;border-radius:.4rem;background:Field;color:FieldText;font:inherit}input[type=checkbox]{width:auto}button{cursor:pointer;border:1px solid #286F78;background:#286F78;color:white;border-radius:.4rem;padding:.55rem 1rem;font:inherit}.secondary{background:transparent;color:CanvasText}.danger{background:transparent;border-color:#b3261e;color:#b3261e}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid GrayText;padding:.65rem;text-align:left;word-break:break-word}.muted{font-size:.9rem}#result{white-space:pre-wrap}code{word-break:break-all}details{min-width:220px}summary{cursor:pointer;color:#286F78}form.client-policy{min-width:min(560px,80vw);max-height:65vh;overflow:auto;padding:.6rem}fieldset{margin:.8rem 0;padding:.7rem;border:1px solid GrayText;border-radius:.4rem}.policy-label{margin-top:.7rem;font-weight:600}.policy-option{display:flex;align-items:flex-start;gap:.55rem;margin:.45rem 0}.policy-option input{margin-top:.25rem}.policy-option span{display:grid;gap:.2rem}
+.admin-shell{width:min(1100px,calc(100% - 36px));margin:32px auto 72px}
+.admin-shell header{padding:6px 0 22px;border-bottom:1px solid color-mix(in srgb,CanvasText 15%,transparent);gap:1.5rem}
+.section-heading{margin:30px 0 22px}
+.section-heading h2{font-size:1.65rem;margin:0 0 6px}
+.section-heading p{margin:0;max-width:820px}
+.panel{background:Canvas;border:1px solid color-mix(in srgb,CanvasText 15%,transparent);border-radius:12px;padding:22px 24px;margin:18px 0;box-shadow:0 2px 12px color-mix(in srgb,CanvasText 4%,transparent)}
+.panel h2{font-size:1.15rem;margin:0 0 12px}
+.panel h2+p{margin:6px 0 16px}
+.panel table{font-size:.9rem}
+.table-wrap{overflow-x:auto}
+.service-directory{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:16px}
+.service-card{border:1px solid color-mix(in srgb,#286F78 24%,transparent);border-radius:10px;padding:18px;background:color-mix(in srgb,Canvas 93%,#286F78 7%)}
+.service-card h3{margin:0 0 8px;font-size:1.06rem}
+.service-card p{margin:8px 0 12px;font-size:.88rem}
+.service-card a{display:inline-block;margin-top:8px;font-weight:650;text-decoration:none}
+.breadcrumbs{margin:24px 0 8px;font-size:.87rem;color:GrayText}
+.breadcrumbs a{text-decoration:none}
+.admin-shell form#add{max-width:540px}
+.admin-shell button:disabled{opacity:.5;cursor:wait}
+@media(max-width:680px){.admin-shell{width:calc(100% - 22px);margin:16px auto}.panel{padding:14px}.admin-shell header{align-items:flex-start}.brand-subtitle{max-width:210px}.service-directory{grid-template-columns:1fr}}
+`;
 export const ADMIN_SCRIPT=`'use strict';
 const COPY=${JSON.stringify(ADMIN_BROWSER_COPY)};
 (async()=>{
@@ -26,7 +47,7 @@ const COPY=${JSON.stringify(ADMIN_BROWSER_COPY)};
     const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},credentials:'same-origin',body:JSON.stringify(body)});
     const out=await r.json();if(!r.ok)throw new Error(out.error||COPY.requestFailed);return out;
   }
-  document.getElementById('add').addEventListener('submit',async ev=>{
+  document.getElementById('add')?.addEventListener('submit',async ev=>{
     ev.preventDefault();const f=ev.currentTarget;const btn=f.querySelector('button');btn.disabled=true;
     try{const token=f.elements.token.value;const encrypted=await encryptToken(token);
       const out=await api('/admin/api/connections',{owner:f.elements.owner.value.trim(),kind:f.elements.kind.value,encrypted});
@@ -67,12 +88,12 @@ const COPY=${JSON.stringify(ADMIN_BROWSER_COPY)};
     try{await api('/admin/api/operation',{id:b.dataset.operation,action:'deny'});location.reload()}
     catch(e){result.textContent=e.message}
   }));
-  document.getElementById('rekey').addEventListener('click',async()=>{
+  document.getElementById('rekey')?.addEventListener('click',async()=>{
     if(!confirm(COPY.rekeyConfirm))return;
     try{const out=await api('/admin/api/rekey',{});result.textContent=COPY.rekeyPrefix+out.processed+COPY.rekeyInfix+out.remaining+COPY.rekeySuffix}
     catch(e){result.textContent=e.message}
   });
-  document.getElementById('runner-add').addEventListener('submit',async ev=>{
+  document.getElementById('runner-add')?.addEventListener('submit',async ev=>{
     ev.preventDefault();const f=ev.currentTarget;const btn=f.querySelector('button');btn.disabled=true;
     try{const out=await api('/admin/api/runners/provision',{displayName:f.elements.displayName.value.trim(),capabilities:f.elements.capabilities.value.split(',').map(x=>x.trim()).filter(Boolean),maxConcurrency:Number(f.elements.maxConcurrency.value)});
       result.textContent='Runner ID: '+out.runnerId+'\\n凭据（仅显示这一次，请安全保存）: '+out.token+'\\n保存后刷新页面查看 Runner 状态。';f.reset();

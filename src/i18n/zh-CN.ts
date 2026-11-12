@@ -1,7 +1,7 @@
 import type {DbRow, AdminSession} from '../types.ts';
 import type {McpServer} from '../gateway/types.ts';
 // Human-facing Chinese copy and HTML templates; no token values are embedded here.
-export const GATEWAY_DISCLAIMER = '独立开发的多账号 MCP 网关 · 非 GitHub 官方 MCP Server';
+export const GATEWAY_DISCLAIMER = 'GitHub 模块由 Fongap Labs 独立开发，非 GitHub 官方 MCP Server';
 export const OAUTH_TITLE = 'MCP 连接授权';
 export const OAUTH_DENIED_TITLE = '认证失败';
 export const OAUTH_DENIED_BODY = '<p>动态验证码错误、过期或已使用。</p>';
@@ -42,7 +42,55 @@ export function renderClientRow(c: DbRow,escapeHtml: (s: unknown)=>string,catalo
 }
 export function renderPendingRow(r: DbRow,escapeHtml: (s: unknown)=>string){return `<tr><td>${escapeHtml(r.owner+'/'+r.repo)}</td><td><strong>${escapeHtml(r.title)}</strong><div class="muted">${escapeHtml(r.body.slice(0,300))}</div></td><td>${escapeHtml(new Date(r.expires_at*1000).toISOString().slice(11,19))} UTC</td><td><button type="button" class="approve-operation" data-operation="${escapeHtml(r.id)}">审批执行</button> <button type="button" class="deny-operation danger" data-operation="${escapeHtml(r.id)}">拒绝</button></td></tr>`;}
 export function renderConnectionRow(r: DbRow,escapeHtml: (s: unknown)=>string){return `<tr><td>${escapeHtml(r.owner)}</td><td>${escapeHtml(r.owner_kind)}</td><td>${r.enabled?'启用':'停用'}</td><td>${new Date(r.updated_at*1000).toISOString().slice(0,10)}</td><td><button type="button" class="toggle" data-owner="${escapeHtml(r.owner)}" data-enabled="${r.enabled?'0':'1'}">${r.enabled?'停用':'启用'}</button> <button type="button" class="delete danger" data-owner="${escapeHtml(r.owner)}">删除</button></td></tr>`;}
-export function renderAdminDocument({session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,rows,clientRows,pendingRows}: {session: AdminSession;BRAND_HEAD:string;BRAND_NAME:string;BRAND_HEADER:string;rows:string;clientRows:string;pendingRows:string}){return `<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="csrf-token" content="${session.csrf}">${BRAND_HEAD}<title>${BRAND_NAME} · 连接管理</title><link rel="stylesheet" href="/admin/app.css"><main><header>${BRAND_HEADER}<form id="logout" method="post" action="/admin/logout"><input type="hidden" name="csrf" value="${session.csrf}"><button class="secondary">退出登录</button></form></header><p>GitHub Token 只在浏览器中进行 RSA-OAEP + AES-GCM 加密，提交时发送密文；数据库只保存另行加密的密文。Token 不可查看、不可导出。</p><h2>GitHub 账号连接</h2><table><thead><tr><th>Owner</th><th>类型</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead><tbody>${rows||'<tr><td colspan="5">尚无连接</td></tr>'}</tbody></table><h2>添加 / 更换 GitHub 连接</h2><p>Owner 填仓库地址中的用户名或组织名。相同 Owner 再次提交会替换凭据。建议只使用最小权限 fine-grained PAT。</p><form id="add"><label>GitHub Owner<input name="owner" type="text" maxlength="39" placeholder="example-org" autocomplete="off" required></label><label>账号类型<select name="kind"><option value="Organization">组织</option><option value="User">个人</option></select></label><label>GitHub Token<input name="token" type="password" autocomplete="off" spellcheck="false" required></label><button>加密并保存</button></form><p id="result" role="status" aria-live="polite"></p><h2>授权 MCP 客户端</h2><p>新客户端默认没有权限。请逐项选择可访问的 Resource 与工具；GitHub 工具还需选择 Owner。保存权限会吊销该客户端旧令牌。</p><table><thead><tr><th>客户端</th><th>回调 URI</th><th>状态</th><th>获授权 Owner</th><th>操作</th></tr></thead><tbody>${clientRows||'<tr><td colspan="5">尚无 MCP 客户端注册</td></tr>'}</tbody></table><p class="muted">未获授权的服务和工具无法通过 OAuth 或 MCP 路由访问。</p><h2>写操作人工审批</h2><p>所有 GitHub 写操作必须在此处由管理员人工审批才执行。过期的请求不会被执行。</p><table><thead><tr><th>仓库</th><th>操作内容</th><th>到期</th><th>审批</th></tr></thead><tbody>${pendingRows||'<tr><td colspan="4">暂无待审批写操作</td></tr>'}</tbody></table><h2>加密密钥轮换</h2><p>请先在 Cloudflare Secret 中更新 MCP_KEYRING_JSON，并同步调整 MCP_ACTIVE_ID Variable；确认两个密钥版本均可读取后再点击下方按钮，每次处理最多 50 条。</p><button type="button" id="rekey" class="secondary">迁移旧密钥加密的数据</button><p class="muted">管理页面 30 分钟后需要重新登录。不要把动态验证码种子或 GitHub Token 放进 MCP 工具参数、AI 对话或日志。</p></main><script src="/admin/app.js" defer></script></html>`;}
+export function renderServiceDirectoryCard(
+  module:{id:string;description:string;endpoints:readonly {path:string}[]},
+  escapeHtml:(s:unknown)=>string
+):string{
+  const id=escapeHtml(module.id);
+  const endpoints=module.endpoints.map(endpoint=>'<code>'+escapeHtml(endpoint.path)+'</code>').join('、');
+  return `<article class="service-card"><h3>${id} MCP</h3><p>${escapeHtml(module.description)}</p>
+    <p class="muted">服务入口：${endpoints}</p>
+    <a href="/${encodeURIComponent(module.id)}/admin">管理此服务</a></article>`;
+}
+export function renderAdminDocument(
+  {session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,clientRows,pendingRows,serviceCards}:
+  {session:AdminSession;BRAND_HEAD:string;BRAND_NAME:string;BRAND_HEADER:string;
+    clientRows:string;pendingRows:string;serviceCards:string}
+) {
+  return `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="${session.csrf}">${BRAND_HEAD}
+    <title>${BRAND_NAME} · 管理中心</title>
+    <link rel="stylesheet" href="/admin/app.css"></head><body>
+    <main class="admin-shell"><header>${BRAND_HEADER}
+      <form id="logout" method="post" action="/admin/logout">
+        <input type="hidden" name="csrf" value="${session.csrf}">
+        <button class="secondary">退出登录</button>
+      </form></header>
+    <div class="section-heading"><h2>Hub 管理中心</h2>
+      <p>集中管理已接入的 MCP 服务、OAuth 客户端、人工审批和 Runner。各服务账号凭据在对应服务的独立管理页面配置。</p></div>
+    <section class="panel"><h2>服务管理</h2>
+      <div class="service-directory">${serviceCards||'<p>尚未注册服务模块</p>'}</div>
+    </section>
+    <section class="panel"><h2>授权 MCP 客户端</h2>
+      <p>新客户端默认没有权限。逐项选择允许访问的 Resource 与工具；使用 GitHub 工具时还需指定 Owner。修改权限会吊销旧令牌。</p>
+      <div class="table-wrap"><table><thead><tr><th>客户端</th><th>回调 URI</th><th>状态</th><th>获授权 Owner</th><th>操作</th></tr></thead>
+      <tbody>${clientRows||'<tr><td colspan="5">尚无 MCP 客户端注册</td></tr>'}</tbody></table></div>
+      <p class="muted">未获授权的服务和工具无法通过 OAuth 或 MCP 路由访问。</p>
+    </section>
+    <section class="panel"><h2>写操作人工审批</h2>
+      <p>GitHub 写操作必须由管理员逐项审批；过期请求不会执行。</p>
+      <div class="table-wrap"><table><thead><tr><th>仓库</th><th>操作内容</th><th>到期</th><th>审批</th></tr></thead>
+      <tbody>${pendingRows||'<tr><td colspan="4">暂无待审批写操作</td></tr>'}</tbody></table></div>
+    </section>
+    <section class="panel"><h2>加密密钥轮换</h2>
+      <p>密钥保存在受控运行环境。仅确认旧版本和新版本密钥均可读取后才执行迁移。</p>
+      <button type="button" id="rekey" class="secondary">迁移旧密钥加密的数据</button>
+    </section>
+    <p id="result" role="status" aria-live="polite"></p>
+    <p class="muted">管理员会话有效期为 30 分钟。请勿在 MCP 工具参数、AI 对话或日志中传递凭据。</p>
+    </main><script src="/admin/app.js" defer></script></body></html>`;
+}
 export function renderRunnerSection(runnerRows: string) {
   return `<h2>Runner 注册表与资源租约</h2><p>凭据由 Hub 签发且只显示一次。管理员限定 Runner 能力和并发上限；撤销会停用凭据并释放该 Runner 的 Hub 租约。</p><table><thead><tr><th>Runner</th><th>能力</th><th>活动并发 / 上限</th><th>状态</th><th>最近心跳</th><th>操作</th></tr></thead><tbody>${runnerRows||'<tr><td colspan="6">尚未注册 Runner</td></tr>'}</tbody></table><form id="runner-add"><label>Runner 名称<input name="displayName" maxlength="80" required></label><label>允许能力（英文逗号分隔）<input name="capabilities" placeholder="coding.patch,coding.test" required></label><label>最大并发<input name="maxConcurrency" type="number" min="1" max="128" value="1" required></label><button>签发注册凭据</button></form>`;
 }
