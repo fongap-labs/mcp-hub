@@ -143,3 +143,6 @@ Tests: tests/runtime-authenticated-executor.test.js exercise a real localhost HT
 
 
 The opt-in separate-process Runner and fixed-tool Claude Code CLI backend are documented in [Local Coding Runner](LOCAL_CODING_RUNNER.md). An authenticated task producer and real GitHub E2E acceptance are still required; the existing Hub/Action Worker actor policy remains unchanged.
+
+
+[GitHub-verified local task intake](AUTHORIZED_TASK_INTAKE.md) provides an opt-in authenticated task creation and Hub dispatch path without changing Action Worker's private Agent ingress.

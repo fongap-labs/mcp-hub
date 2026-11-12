@@ -101,6 +101,19 @@ export class RuntimeTaskJournal {
     });
     return { taskRef, state: 'prepared' };
   }
+  /** Runtime-only read of submission identity; never returns task contents. */
+  inspectSubmission(taskRef) {
+    valid(taskRef, REF, 'task_ref');
+    const row = this.#row(taskRef);
+    const task = unseal(this.#key, row.encrypted_task);
+    return {
+      state: row.state,
+      dispatchId: row.dispatch_id,
+      resourceKey: row.resource_key,
+      digest: createHash('sha256').update(JSON.stringify(task)).digest('hex'),
+    };
+  }
+
   attachDispatch(taskRef, dispatchId) {
     valid(taskRef, REF, 'task_ref'); valid(dispatchId, DISPATCH, 'dispatch_id');
     return this.#tx(() => {

@@ -5,6 +5,7 @@ import { RuntimeDispatchClient } from '../src/control/runner-runtime-client.ts';
 import { startLoopbackRuntimeTaskService } from './authenticated-task-service.mjs';
 import { flushRuntimeReconciliations } from './runtime-task-port.mjs';
 import { createClaudeCodeExecutor } from './claude-code-executor.mjs';
+import { createAuthorizedTaskProducer } from './authorized-task-producer.mjs';
 
 function requireConfig(env, key) {
   const value = env[key];
@@ -41,8 +42,19 @@ export async function startTrustedRuntime(env = process.env) {
     // No new tasks until the previous process's incomplete work is safely held.
     journal.recoverAfterRestart();
     await flushRuntimeReconciliations({ journal, runtimeClient });
+    // Local task admission is OFF unless the operator explicitly authorizes GitHub actors.
+    let taskProducer = null;
+    if (env.MCP_RUNTIME_ACTORS_JSON) {
+      let allowedActors;
+      try { allowedActors = JSON.parse(env.MCP_RUNTIME_ACTORS_JSON); }
+      catch { throw new TypeError('invalid_runtime_actor_allowlist'); }
+      taskProducer = createAuthorizedTaskProducer({
+        journal, runtimeClient, allowedActors,
+        allowedRepositories: Object.keys(workspaceRoots),
+      });
+    }
     const server = await startLoopbackRuntimeTaskService({
-      journal, runtimeClient, executor,
+      journal, runtimeClient, executor, taskProducer,
       runnerCredentials: [{
         runnerId, token: requireConfig(env, 'MCP_RUNNER_RUNTIME_TOKEN'),
       }],
