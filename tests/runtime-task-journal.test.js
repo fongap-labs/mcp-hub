@@ -247,3 +247,42 @@ test('failed reconciliation remains pending, and wrong encryption key cannot rea
     j.close();
   } finally { fx.cleanup(); }
 });
+
+
+test('lost Hub acknowledgement can be recovered only from exact server-committed state', async () => {
+  const fx = fixture();
+  try {
+    const j = fx.open(); createTask(j);
+    await j.claimAcceptedTask(offer, runnerId, fakeRuntime());
+    await j.beginSideEffects(taskRef, runnerId, leaseId, fakeRuntime());
+    j.complete(taskRef, runnerId, leaseId, 'completed', { verified: true });
+    let lookups = 0;
+    await assert.rejects(flushRuntimeReconciliations({
+      journal: j,
+      runtimeClient: {
+        async reconcile() { throw new Error('response lost after commit'); },
+        async get() {
+          lookups++;
+          return { dispatch_id: dispatchId, status: 'closed', runtime_sequence: 4,
+            runtime_state: 'failed' };
+        },
+      },
+    }), /response lost after commit/);
+    assert.equal(lookups, 1);
+    assert.equal(j.recoveryPlan().find(x => x.taskRef === taskRef).report.state, 'completed');
+
+    const resolved = await flushRuntimeReconciliations({
+      journal: j,
+      runtimeClient: {
+        async reconcile() { throw new Error('409 already applied'); },
+        async get() {
+          return { dispatch_id: dispatchId, status: 'closed', runtime_sequence: 4,
+            runtime_state: 'completed' };
+        },
+      },
+    });
+    assert.deepEqual(resolved, [{ taskRef, sequence: 4, state: 'completed' }]);
+    assert.equal(j.recoveryPlan().find(x => x.taskRef === taskRef).report, null);
+    j.close();
+  } finally { fx.cleanup(); }
+});
