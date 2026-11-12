@@ -9,7 +9,7 @@ const LEASE_ID = /^lease_[A-Za-z0-9_-]{43}$/;
 const REF = /^[A-Za-z0-9._:-]{1,200}$/;
 const MAX_BODY = 4096;
 const MAX_SUBMISSION_BODY = 32768;
-const ROUTES = new Set(['/runtime/v1/tasks/execute', '/runtime/v1/tasks/cancel']);
+const ROUTES = new Set(['/runtime/v1/tasks/execute', '/runtime/v1/tasks/cancel', '/runtime/v1/tasks/fence']);
 
 function hashCredential(credential) {
   if (typeof credential !== 'string' || !/^[A-Za-z0-9._~-]{32,256}$/.test(credential)) {
@@ -103,7 +103,7 @@ async function readOffer(req) {
  * executor.execute(task, context) is the separately provisioned Coding Engine.
  * No arbitrary commands, shell or GitHub permission is exposed by this module.
  */
-function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, executor, taskProducer = null, taskDelivery = null }) {
+function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, executor, taskProducer = null, taskDelivery = null, nowMs = Date.now, leaseCheckMs = 5000 }) {
   if (!journal || typeof journal.claimAcceptedTask !== 'function' ||
       typeof journal.beginSideEffects !== 'function' || typeof journal.complete !== 'function' ||
       !runtimeClient || typeof runtimeClient.get !== 'function' ||
@@ -117,6 +117,8 @@ function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, e
   if (taskDelivery !== null && typeof taskDelivery.deliver !== 'function') {
     throw new TypeError('invalid_task_delivery');
   }
+  if (typeof nowMs !== 'function' || !Number.isSafeInteger(leaseCheckMs) ||
+      leaseCheckMs < 100 || leaseCheckMs > 30000) throw new TypeError('invalid_runtime_lease_monitor');
   const authenticate = buildAuthenticator(runnerCredentials);
   const active = new Map();
 
@@ -167,6 +169,15 @@ function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, e
       journal, runtimeClient, authenticatedRunnerId: runnerId,
     });
 
+    if (target === '/runtime/v1/tasks/fence') {
+      try {
+        await port.fenceRequested(offer);
+        active.get(offer.dispatchId)?.abort();
+        try { await flushRuntimeReconciliations({ journal, runtimeClient }); }
+        catch { return send(res, 202, { status: 'reconciliation_pending', dispatchId: offer.dispatchId }); }
+        return send(res, 202, { status: 'outcome_uncertain', dispatchId: offer.dispatchId });
+      } catch { return send(res, 409, { error: 'runtime_fence_not_authorized' }); }
+    }
     if (target === '/runtime/v1/tasks/cancel') {
       try {
         await port.cancellationRequested(offer);
@@ -195,7 +206,40 @@ function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, e
         // Claimed/started tasks remain held for explicit recovery, never replay.
         return send(res, 503, { error: 'runtime_execution_not_started_or_uncertain' });
       }
+      // Independent Runtime lease monitor: a crashed Runner cannot keep
+      // editing after its lease is revoked, expires, or becomes unverifiable.
+      // Fence is persisted BEFORE signalling AbortController to the CLI.
+      const fence = () => {
+        try { journal.fenceOwnedTask(offer.taskRef, runnerId, offer.leaseId, offer.dispatchId); }
+        catch { /* Conflicts already prevent a terminal success write. */ }
+        controller.abort();
+      };
+      const verifyLease = async () => {
+        if (controller.signal.aborted) return false;
+        let valid = false;
+        try {
+          const record = await runtimeClient.get(offer.dispatchId);
+          valid = record?.dispatch_id === offer.dispatchId &&
+            record.task_ref === offer.taskRef &&
+            record.resource_key === offer.resourceKey &&
+            record.runner_id === runnerId &&
+            record.lease_id === offer.leaseId &&
+            record.status === 'accepted' &&
+            Number.isSafeInteger(record.lease_expires_at) &&
+            record.lease_expires_at > Math.floor(nowMs() / 1000);
+        } catch { /* Unverifiable lease is never treated as valid. */ }
+        if (!valid) fence();
+        return valid;
+      };
+      let monitorPending = Promise.resolve(true);
+      let checking = false;
+      const monitor = setInterval(() => {
+        if (checking || controller.signal.aborted) return;
+        checking = true;
+        monitorPending = verifyLease().finally(() => { checking = false; });
+      }, leaseCheckMs);
       let result;
+      let safe = false;
       try {
         result = await executor.execute(task, {
           taskRef: offer.taskRef, resourceKey: offer.resourceKey,
@@ -203,11 +247,21 @@ function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, e
           signal: controller.signal,
         });
         if (result === undefined) result = { ok: true };
+        // A quick task also needs the final lease check before completion.
+        // Wait for any in-flight monitor query before deciding success.
+        await monitorPending;
+        safe = await verifyLease();
       } catch {
-        // CLI failures, timeouts and cancellation may happen AFTER a file edit.
-        // Never classify these as "not started" or safe to replay.
-        try { journal.markExecutionUncertain(offer.taskRef, runnerId, offer.leaseId); }
-        catch { return send(res, 409, { error: 'runtime_outcome_uncertain' }); }
+        safe = false;
+      } finally {
+        clearInterval(monitor);
+        await monitorPending;
+      }
+      if (!safe || controller.signal.aborted) {
+        // The CLI may have already modified files. Do not replay automatically.
+        try {
+          journal.fenceOwnedTask(offer.taskRef, runnerId, offer.leaseId, offer.dispatchId);
+        } catch { return send(res, 409, { error: 'runtime_outcome_uncertain' }); }
         try { await flushRuntimeReconciliations({ journal, runtimeClient }); }
         catch { return send(res, 202, { status: 'reconciliation_pending', dispatchId: offer.dispatchId }); }
         return send(res, 202, { status: 'outcome_uncertain', dispatchId: offer.dispatchId });
