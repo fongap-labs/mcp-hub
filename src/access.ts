@@ -1,5 +1,5 @@
 import type {Env} from './types.ts';
-import {unb64u} from './util.ts';
+import {cookie,unb64u} from './util.ts';
 
 interface AccessClaims { iss?: string; aud?: string|string[]; exp?: number; nbf?: number; sub?: string; email?: string; }
 interface JwtHeader { alg?: string; kid?: string; }
@@ -31,8 +31,13 @@ async function loadKeys(issuer: string): Promise<AccessJwk[]> {
 export async function accessIdentity(request: Request,env: Env): Promise<string|null> {
   try {
     const config=accessConfig(env);
-    const token=request.headers.get('Cf-Access-Jwt-Assertion')||'';
-    if (!config || token.length>16000) return null;
+    // Access normally injects the assertion header. For browser requests it
+    // may instead forward the application-scoped CF_Authorization cookie.
+    // Never fall back if a header is present but invalid: this prevents an
+    // ambiguous/malformed assertion from being silently overridden.
+    const assertion=request.headers.get('Cf-Access-Jwt-Assertion');
+    const token=assertion!==null?assertion:cookie(request,'CF_Authorization');
+    if (!config || !token || token.length>16000) return null;
     const parts=token.split('.');
     if (parts.length!==3 || parts.some(s=>!s)) return null;
     const header=JSON.parse(new TextDecoder().decode(unb64u(parts[0]!))) as JwtHeader;
