@@ -25,6 +25,30 @@ export function ingestionPublicJwk(env: Env): JsonWebKey {
   if(key.kty!=='RSA'||key.alg && key.alg!=='RSA-OAEP-256'||!key.n||!key.e||!key.d) throw new Error('Invalid ingestion key');
   return {kty:'RSA',n:String(key.n),e:String(key.e),alg:'RSA-OAEP-256',ext:true,key_ops:['encrypt']};
 }
+/** Validate the original RSA ingestion private JWK and its derived public key
+ * without decrypting tokens or exposing private key data. */
+export async function verifiedIngestionPublicJwk(env: Env): Promise<JsonWebKey> {
+  const publicJwk=ingestionPublicJwk(env);
+  const privateJwk=JSON.parse(env.MCP_INGEST_JWK) as JsonWebKey;
+  await crypto.subtle.importKey('jwk',privateJwk,
+    {name:'RSA-OAEP',hash:'SHA-256'},false,['decrypt']);
+  await crypto.subtle.importKey('jwk',publicJwk,
+    {name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt']);
+  return publicJwk;
+}
+
+/** GitHub account creation needs both the *existing* RSA ingestion key and
+ * an importable AES-GCM keyring entry for its active ID. Deploy health must
+ * fail closed when either secret is missing or malformed. */
+export async function runtimeCryptoReady(env: Env): Promise<boolean> {
+  try {
+    if (!env.MCP_ACTIVE_ID || !/^[\\w-]{1,32}$/.test(env.MCP_ACTIVE_ID)) return false;
+    await aesKey(env,env.MCP_ACTIVE_ID,'encrypt');
+    await verifiedIngestionPublicJwk(env);
+    return true;
+  } catch { return false; }
+}
+
 export async function decryptIngested(env: Env, payload: unknown): Promise<string> {
   const data=asObject(payload);
   const {wrappedKey,iv,ciphertext}=data;
