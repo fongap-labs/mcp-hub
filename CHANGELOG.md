@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 新增: 实现 Runtime 与 Runner 分权的 HTTP 适配客户端与任务认领接口，隔离密钥、任务正文和执行状态，补齐正常与失败路径测试；真实 Coding Runtime 任务 API 仍待接入。
+
 - 修复: 补齐 Runner 派发和额度接口凭据权限，修复首次派发误报幂等冲突，并新增派发、租约、幂等、取消与 Runtime 对账回归测试，不改变运行时任务内容归属。
 
 - 维护: 同步 MCP Hub 已验证的生产部署记录、中央运维密钥来源和服务级后台 Access 路径，区分 Cloudflare MFA 与本地 TOTP；不更改代码、密钥或发布配置。
