@@ -9,6 +9,9 @@ import {sha,escapeHtml} from '../src/util.ts';
 import {renderClientRow} from '../src/i18n/zh-CN.ts';
 import {accessFixture,accessIssuer,accessAud} from './helpers/access.js';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
+// Access signing keys are cached per issuer in the Worker. Share a fixture
+// so independent cases do not present conflicting keys for one test issuer.
+const sharedAuth=accessFixture();
 
 const origin='https://mcp.example';
 const firstId='mcp_'+'A'.repeat(43);
@@ -70,7 +73,7 @@ function count(sqlite,table,id){
 }
 test('MCP client deletion is authenticated, confirmed, CSRF-protected, atomic and preserves audit',async()=>{
   const {sqlite,db}=database();
-  const auth=await accessFixture();
+  const auth=await sharedAuth;
   const env={MCP_DB:db,MCP_PUBLIC_URL:origin,MCP_ACCESS_ISSUER:accessIssuer,
     MCP_ACCESS_AUD:accessAud,MCP_AUTH_MODE:'cloudflare-mfa',MCP_COOKIE_KEY:'Z'.repeat(48),
     GMC_WRITE_MODE:'disabled',GMC_CONTENT_MODE:'disabled'};
@@ -119,7 +122,7 @@ test('MCP client deletion is authenticated, confirmed, CSRF-protected, atomic an
 
 test('in-flight GitHub writes block deletion; a D1 batch failure rolls back every credential deletion',async()=>{
   const {sqlite,db}=database();
-  const auth=await accessFixture();
+  const auth=await sharedAuth;
   const env={MCP_DB:db,MCP_PUBLIC_URL:origin,MCP_ACCESS_ISSUER:accessIssuer,
     MCP_ACCESS_AUD:accessAud,MCP_AUTH_MODE:'cloudflare-mfa',MCP_COOKIE_KEY:'Z'.repeat(48),
     GMC_WRITE_MODE:'disabled',GMC_CONTENT_MODE:'disabled'};
