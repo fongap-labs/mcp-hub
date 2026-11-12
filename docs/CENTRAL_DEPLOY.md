@@ -59,7 +59,9 @@ Cloudflare Worker
 
 **登录方式与切换边界**：默认 `access-totp` 模式继续采用 Access 身份验证 + MCP Hub 独立动态验证码。用户选定的目标是 **Cloudflare 账号登录 + Cloudflare Access 独立 MFA**，省去 Email One-time PIN 与本地重复 TOTP。此目标只在下文“Cloudflare 账号 + Cloudflare MFA：安全切换”的实际双因素验收成功并显式启用 `MCP_AUTH_MODE=cloudflare-mfa` 后生效。任何模式都不能启用 Allow Everyone 或 Bypass。
 
-**Access JWT 到达 Worker 的检查**：浏览器登录成功后，Cloudflare 应为受保护请求注入 `Cf-Access-Jwt-Assertion`；浏览器也可能带有 `CF_Authorization` Cookie。MCP Hub 优先验证请求头，只有请求头完全缺失时才验证 Cookie；两者均执行相同的 RSA 签名、Issuer、AUD、有效期与用户身份校验。若请求头存在但无效，不会以 Cookie 绕过；二者均无效则继续返回 403，浏览器得到说明页面，API 仍返回 JSON。**此兼容逻辑不是 Access 应用路径配置的替代品**：`/admin`、`/admin/*`、`/authorize` 必须在 Access 应用中受到保护。若为不同路径配置了多个 Access 应用，`MCP_ACCESS_AUD` 应准确包含这些应用的 Audience，并严格核对访问策略。
+**Worker 原生 Access 身份优先**：MCP Hub 在 Cloudflare 已对当前 Worker 调用认证时优先读取可信 `ctx.access`，严格要求 `ctx.access.aud` 属于 `MCP_ACCESS_AUD` 且身份提供商返回有效的用户邮箱，并为该单次请求绑定脱敏主体标识。只有原生 Access 上下文不存在时，才回退现有的请求头 JWT / Cookie 验签流程。若存在原生上下文但 AUD 不匹配或身份不完整，则直接拒绝，不允许以其他 JWT 绕过。未通过 Cloudflare Access 的 Worker 调用不会获得可信的 `ctx.access`。不依赖 `ctx.access` 的子 Worker Service Binding 或静态资源路由仍采用原有 JWT 验证。仅使用原生上下文不代表自动验证 MFA 策略；仍须在 Zero Trust 强制执行并做实际登录验收。
+
+**Access JWT 到达 Worker 的检查**：浏览器登录成功后，Cloudflare 应为受保护请求注入 `Cf-Access-Jwt-Assertion`；浏览器也可能带有 `CF_Authorization` Cookie。当原生 Worker Access 上下文不可用时，MCP Hub 优先验证请求头，只有请求头完全缺失时才验证 Cookie；两者均执行相同的 RSA 签名、Issuer、AUD、有效期与用户身份校验。若请求头存在但无效，不会以 Cookie 绕过；二者均无效则继续返回 403，浏览器得到说明页面，API 仍返回 JSON。**此兼容逻辑不是 Access 应用路径配置的替代品**：`/admin`、`/admin/*`、`/authorize` 必须在 Access 应用中受到保护。若为不同路径配置了多个 Access 应用，`MCP_ACCESS_AUD` 应准确包含这些应用的 Audience，并严格核对访问策略。
 
 上线验收建议依次检查：未登录访问 `/admin` 是否被 Cloudflare Access 拦截；完成通行密钥/IdP 认证后是否进入 MCP Hub 6 位动态码页面；完成 TOTP 后是否进入管理后台；没有 Access 身份令牌、错误 AUD、伪造签名和已过期 JWT 是否继续被拒绝；MCP 公共 OAuth/MCP 接口是否保持原有行为。
 
