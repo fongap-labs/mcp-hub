@@ -10,7 +10,7 @@ import {verifyTotp} from './totp.ts';
 import {cloudflareMfaOnly} from './auth-mode.ts';
 import {revokeClientTokens} from './tokens.ts';
 import {renderAdminLogin,renderAdminDocument,renderClientRow,renderPendingRow,renderConnectionRow,renderRunnerSection} from './i18n/zh-CN.ts';
-import {renderServiceAdminDocument} from './service-admin-ui.ts';
+import {renderServiceAdminDocument} from './i18n/service-admin.ts';
 import type {McpModule} from './gateway/types.ts';
 import {adminProvisionRunner,adminRevokeRunner,listRunners} from './control/runner-registry.ts';
 import {MCP_MODULES,MCP_SERVERS,toolPolicyId} from './gateway/registry.ts';
