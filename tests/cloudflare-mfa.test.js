@@ -85,6 +85,11 @@ test('Access MFA mode enters Admin without another OTP while retaining session/C
     }),env);
     assert.equal(register.status,201);
     const {client_id}=await register.json();
+    // This test exercises consent and CSRF, not token encryption. An enabled
+    // synthetic owner satisfies the independent administrator policy gate.
+    const ts=Math.floor(Date.now()/1000);
+    sqlite.prepare('INSERT INTO github_connections(owner,owner_kind,key_id,iv,ciphertext,enabled,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?)')
+      .run('acme','Organization','v1','synthetic-iv','synthetic-ciphertext',ts,ts);
     const approval=await worker.fetch(authRequest('/admin/api/client-approval','POST',
       JSON.stringify({clientId:client_id,approved:true,allowedOwners:['acme'],
         allowedResources:['default','github'],allowedTools:[
