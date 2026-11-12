@@ -31,6 +31,25 @@ test('Generates exact approved MCP Hub bindings, no credentials or runtime secre
  assert.ok(!JSON.stringify(cfg).includes('synthetic-credential'));
  assert.equal(Object.keys(cfg.vars).length,8);
 });
+test('treats missing, empty and whitespace-only optional deployment settings as defaults',()=>{
+  for (const overrides of [
+    {GMC_WRITE_MODE:'',GMC_CONTENT_MODE:'',MCP_OAUTH_TTL:''},
+    {GMC_WRITE_MODE:'   ',GMC_CONTENT_MODE:' \t ',MCP_OAUTH_TTL:' \n '},
+    {GMC_WRITE_MODE:undefined,GMC_CONTENT_MODE:undefined,MCP_OAUTH_TTL:undefined}
+  ]) {
+    const c=loadDeployConfig(env(overrides));
+    assert.deepEqual([c.writeMode,c.contentMode,c.oauthTtl],['disabled','disabled','900']);
+    const wrangler=buildWranglerConfig(c);
+    assert.deepEqual([wrangler.vars.GMC_WRITE_MODE,wrangler.vars.GMC_CONTENT_MODE,wrangler.vars.MCP_OAUTH_TTL],
+      ['disabled','disabled','900']);
+  }
+  const c=loadDeployConfig(env({GMC_WRITE_MODE:'approval',GMC_CONTENT_MODE:'enabled',MCP_OAUTH_TTL:'3600'}));
+  assert.deepEqual([c.writeMode,c.contentMode,c.oauthTtl],['approval','enabled','3600']);
+  assert.throws(()=>loadDeployConfig(env({GMC_WRITE_MODE:'unknown'})),/GMC_WRITE_MODE/);
+  assert.throws(()=>loadDeployConfig(env({GMC_CONTENT_MODE:'unknown'})),/GMC_CONTENT_MODE/);
+  assert.throws(()=>loadDeployConfig(env({MCP_OAUTH_TTL:'299'})),/MCP_OAUTH_TTL/);
+  assert.throws(()=>loadDeployConfig(env({MCP_ACCESS_ISSUER:'fongen.cloudflareaccess.com'})),/MCP_ACCESS_ISSUER/);
+});
 test('rejects invalid or incomplete deployment configurations',()=>{
  for(const x of [{MCP_D1_ID:''},{MCP_PUBLIC_URL:'http://mcp.135468.xyz'},{MCP_PUBLIC_URL:'https://mcp.example.workers.dev'},{MCP_PUBLIC_URL:'https://gmc.135468.xyz/mcp'},{GMC_WRITE_MODE:'true'},{GMC_CONTENT_MODE:'true'},{MCP_OAUTH_TTL:'120'},{MCP_ACTIVE_ID:''},{MCP_ACCESS_ISSUER:''},{MCP_ACCESS_ISSUER:'https://wrong.example'},{MCP_ACCESS_AUD:''},{DEPLOY_SOURCE_SHA:'main'},{DEPLOY_ENVIRONMENT:'mcp-hub'},{DEPLOY_ENVIRONMENT:'mcp-hub-staging'},{DEPLOY_ENVIRONMENT:'mcp-hub-ops'},{CLOUDFLARE_API_TOKEN_SECONDARY:''}]){
    assert.throws(()=>loadDeployConfig(env(x)));
