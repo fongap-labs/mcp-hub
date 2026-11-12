@@ -22,9 +22,9 @@ if [[ -z "${CLOUDFLARE_API_TOKEN_SECONDARY:-}" ]]; then
   echo '::error::Required Cloudflare deployment credential is unavailable.' >&2
   exit 77
 fi
-# Runtime Worker Secrets stay in Cloudflare. Fail closed if credentials from another
-# environment were inadvertently inherited by the deployment job.
-for name in MCP_ADMIN_KEY MCP_APPROVAL_KEY MCP_TOTP_SECRET MCP_COOKIE_KEY MCP_KEYRING_JSON MCP_INGEST_JWK MCP_RUNTIME_KEY; do
+# The retired authentication Secrets are never legitimate deployment inputs.
+# Active Worker Secrets are passed only through the central scoped Secret plan.
+for name in MCP_ADMIN_KEY MCP_APPROVAL_KEY; do
   if [[ -n "${!name:-}" ]]; then
     echo "::error::Worker runtime Secret must not be passed to deployment: $name." >&2
     exit 77
@@ -42,6 +42,7 @@ work="$(mktemp -d "${RUNNER_TEMP}/mcp-hub-deploy.XXXXXX")"
 cleanup() { rm -rf "$work"; }
 trap cleanup EXIT
 config="$work/wrangler.jsonc"
+secrets="$work/runtime-secrets.json"
 
 if [[ ! -f node_modules/wrangler/bin/wrangler.js ]]; then
   echo '::error::Dependencies must be installed and validated before the Cloudflare deploy step.' >&2
@@ -52,9 +53,11 @@ node scripts/deployment-config.mjs prepare "$config"
 
 wrangler() { node scripts/with-secondary-cloudflare.mjs "$@"; }
 wrangler deploy --dry-run --outdir "$work/build" --config "$config"
+# Fail before touching D1 if the GitHub-managed TOTP or optional key material is missing/invalid.
+node scripts/runtime-secrets.mjs prepare "$secrets"
 # D1 migrations are additive and NOT reverted by a Worker rollback.
 wrangler d1 migrations apply mcp-hub --remote --config "$config"
-wrangler deploy --config "$config"
+wrangler deploy --secrets-file "$secrets" --config "$config"
 
 healthy=false
 for attempt in 1 2 3; do
