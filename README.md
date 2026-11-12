@@ -11,7 +11,7 @@ MCP Hub 为不同模块提供统一的 OAuth 客户端管理、权限策略和�
 ## 产品标识和避免混淆
 
 - 产品显示名称：**MCP Hub**；来源：**Fongap Labs**；版本：**v0.1.0**；MCP `serverInfo.name`：`mcp-hub`；客户端推荐配置名：`mcp-hub`。
-- `/admin` 是通用 Hub 管理中心；各模块管理入口为 `/<service>/admin`，如 `/github/admin`。只有 GitHub 模块使用「非 GitHub 官方 MCP Server」说明。
+- `/admin` 是通用 Hub 管理中心；各模块管理入口为 `/admin/<service>`，如 `/admin/github`。只有 GitHub 模块使用「非 GitHub 官方 MCP Server」说明。
 - 产品独立图标为 `#286F78` 的连接网络标记，**不是** GitHub 的 Octocat / Invertocat 标志；管理页直接内嵌 SVG，避免跨路径加载时显示破图。
 - GitHub 名称只用于说明支持的第三方服务；不使用官方 Logo 冒充本产品标识，不以 `github-mcp-server` 命名。
 
@@ -28,7 +28,7 @@ MCP Hub 为不同模块提供统一的 OAuth 客户端管理、权限策略和�
 | GitHub 请求 | Worker 按需解密，仅发送到 `https://api.github.com` 的 `Authorization: Bearer ...` 请求头，HTTPS；响应只返回受控字段 |
 | 路由 | 按 owner 大小写不敏感精确映射；未配置、停用、未授权时立即拒绝，**绝不回退其他 GitHub Token** |
 | 写操作 | 默认关闭。仅启用 `GMC_WRITE_MODE=approval`、为客户端批准写权限、用户在 OAuth 中同意后才可提交；**创建 Issue 仍需管理员在 `/admin` 逐次审批，10 分钟过期** |
-| 管理界面 | 与 MCP 工具隔离；Cloudflare Access 身份及已强制的 MFA、按 `MCP_AUTH_MODE` 控制的本地 TOTP（默认开启），配合 HMAC 签名 HttpOnly/Secure/SameSite Cookie、CSRF 验证和严格 CSP；`/admin` 管理 Hub，`/github/admin` 管理 GitHub 模块 |
+| 管理界面 | 与 MCP 工具隔离；Cloudflare Access 身份及已强制的 MFA、按 `MCP_AUTH_MODE` 控制的本地 TOTP（默认开启），配合 HMAC 签名 HttpOnly/Secure/SameSite Cookie、CSRF 验证和严格 CSP；`/admin` 管理 Hub，`/admin/github` 管理 GitHub 模块 |
 | 日志与响应 | 无 Token 导出接口；不记录 Header、请求体、GitHub 错误原文或异常堆栈；已知 GitHub Token 字样会尝试脱敏 |
 | 撤销 | 管理员可停用/删除 Github 连接，或撤销 MCP 客户端；撤销客户端时其访问令牌立即失效 |
 
@@ -45,11 +45,11 @@ MCP Hub 为不同模块提供统一的 OAuth 客户端管理、权限策略和�
 
 **不要把 GitHub PAT、MCP_TOTP_SECRET、MCP_RUNTIME_KEY、MCP_KEYRING_JSON 或 MCP_INGEST_JWK 粘贴给 Agent。** 以下命令也不要求你把真实 Token 放进终端或聊天历史；GitHub Token 只在部署后的管理员网页填写。
 
-**管理方式**：默认 `access-totp` 需 Cloudflare Access 身份验证加 MCP Hub 独立 TOTP；已验证 Access 应用级 MFA 后，可通过 `MCP_AUTH_MODE=cloudflare-mfa` 改为不重复输入本地动态码。管理会话为 30 分钟，OAuth 授权仍需主动确认。生产发布必须保持 `/admin`、`/admin/*`、`/github/admin`、`/github/admin/*` 和 `/authorize` 的 Access 保护、有效的 `MCP_ACCESS_ISSUER`/`MCP_ACCESS_AUD`，以及中央合同要求的 `MCP_TOTP_SECRET`（用于安全回退）。详见 [中央部署操作](docs/CENTRAL_DEPLOY.md)。
+**管理方式**：默认 `access-totp` 需 Cloudflare Access 身份验证加 MCP Hub 独立 TOTP；已验证 Access 应用级 MFA 后，可通过 `MCP_AUTH_MODE=cloudflare-mfa` 改为不重复输入本地动态码。管理会话为 30 分钟，OAuth 授权仍需主动确认。生产发布必须保持 `/admin`、`/admin/*` 和 `/authorize` 的 Access 保护；服务后台 `/admin/github` 已由 `/admin/*` 覆盖、有效的 `MCP_ACCESS_ISSUER`/`MCP_ACCESS_AUD`，以及中央合同要求的 `MCP_TOTP_SECRET`（用于安全回退）。详见 [中央部署操作](docs/CENTRAL_DEPLOY.md)。
 
 ## MCP Hub 部署边界
 
-目标：`fongap-labs/mcp-hub`、Cloudflare Worker `mcp-hub`、D1 数据库 `mcp-hub`（绑定 `MCP_DB`）、唯一公开域名 `https://mcp.135468.xyz`。MCP 入口 `/` 与 `/github` 保持各自 OAuth Resource 和 Access Token。通用管理中心为 `/admin`，GitHub 服务管理为 `/github/admin`。新的服务管理路径必须配置 Cloudflare Access 保护。
+目标：`fongap-labs/mcp-hub`、Cloudflare Worker `mcp-hub`、D1 数据库 `mcp-hub`（绑定 `MCP_DB`）、唯一公开域名 `https://mcp.135468.xyz`。MCP 入口 `/` 与 `/github` 保持各自 OAuth Resource 和 Access Token。通用管理中心为 `/admin`，GitHub 服务管理为 `/admin/github`。新增服务管理页面统一放在 `/admin/<service>` 下，由同一个 Access 应用和 AUD 保护；不提供旧路径跳转。
 
 ### 统一交由 Action Worker 部署
 
