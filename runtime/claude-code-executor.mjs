@@ -1,5 +1,5 @@
 import { spawn, execFileSync } from 'node:child_process';
-import { isAbsolute, resolve } from 'node:path';
+import { isAbsolute, resolve, sep } from 'node:path';
 import { realpathSync } from 'node:fs';
 
 const REPO = /^fongap-labs\/[A-Za-z0-9_.-]{1,100}$/;
@@ -14,6 +14,7 @@ const SAFE_BRANCH = /^(?:feat|fix|chore|agent)\/[A-Za-z0-9._/-]{1,140}$/;
 export function createClaudeCodeExecutor({
   executablePath, workspaceRoots, maxTurns = 12, timeoutMs = 20 * 60_000,
   gitExecutable = 'git', spawnProcess = spawn, inspectGit = null,
+  workspacePreparer = null,
 }) {
   if (typeof executablePath !== 'string' || !isAbsolute(executablePath)) {
     throw new TypeError('absolute_claude_executable_required');
@@ -25,6 +26,9 @@ export function createClaudeCodeExecutor({
   if (!Number.isSafeInteger(maxTurns) || maxTurns < 1 || maxTurns > 24 ||
       !Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 2 * 60 * 60_000) {
     throw new TypeError('invalid_coding_engine_limits');
+  }
+  if (workspacePreparer !== null && typeof workspacePreparer.prepare !== 'function') {
+    throw new TypeError('invalid_workspace_preparer');
   }
   const approved = new Map();
   for (const [repo, workspace] of Object.entries(workspaceRoots)) {
@@ -45,7 +49,18 @@ export function createClaudeCodeExecutor({
           task.prompt.length > 30000 || !SHA.test(task.sourceSha)) {
         throw new TypeError('unapproved_coding_task');
       }
-      const workspace = approved.get(task.repository);
+      const root = approved.get(task.repository);
+      const workspace = workspacePreparer
+        ? await workspacePreparer.prepare(task, context)
+        : root;
+      if (typeof workspace !== 'string' || !isAbsolute(workspace)) {
+        throw new Error('workspace_preparation_invalid');
+      }
+      // Trusted preparer may return only a nested per-task worktree in the
+      // approved sibling directory, never arbitrary host filesystem paths.
+      if (workspacePreparer && !resolve(workspace).startsWith(resolve(root + '.worktrees') + sep)) {
+        throw new Error('workspace_outside_approved_root');
+      }
       const physical = realpathSync(workspace);
       if (physical !== workspace) throw new Error('workspace_symlink_forbidden');
       const branch = getGit(workspace, ['symbolic-ref','--quiet','--short','HEAD']);
