@@ -50,15 +50,13 @@ Cloudflare Worker
 
 ## 2. Cloudflare Access 与动态码
 
-**管理路径分层**：全局管理中心 `/admin`，单服务管理为 `/<service>/admin`，目前已注册的 GitHub 服务对应 `/github/admin`；服务列表按模块声明自动生成。所有服务级管理请求仍需现有 Access 身份验证及管理员 Session；未知服务拒绝访问。Cloudflare Zero Trust 的 MCP Hub Access 应用应将 `/github/admin`（以及未来新增的服务管理入口）纳入**同一受保护应用、同一 AUD**，否则这类路径可能缺少访问令牌而返回 403。不要启用 Bypass 或 Allow Everyone。原有 `/admin` 及 `/admin/api/*` 保持兼容，现有 `/github` OAuth Resource 和 MCP 客户端无需迁移。
+**管理路径分层**：全局管理中心 `/admin`，单服务管理为 `/admin/<service>`，目前已注册的 GitHub 服务对应 `/admin/github`；服务列表按模块声明自动生成。所有服务级管理请求仍需现有 Access 身份验证及管理员 Session；未知服务拒绝访问。Cloudflare Zero Trust 的 MCP Hub Access 应用只需通过 `/admin` 和 `/admin/*` 保护全部管理页面（包括 `/admin/github` 和未来新增服务），共用**同一 Access 应用、同一 AUD**。不要启用 Bypass 或 Allow Everyone。原有 `/admin` 及 `/admin/api/*` 继续使用，新项目不提供旧服务管理地址的兼容路由或重定向；现有 `/github` OAuth Resource 和 MCP 客户端不受影响。
 
 
-生产部署前，先在 Cloudflare Zero Trust → Access → Applications 配置仅允许本人访问的自托管应用，至少保护以下五个路径（新增服务管理入口时相应扩展）：
+生产部署前，先在 Cloudflare Zero Trust → Access → Applications 配置仅允许本人访问的自托管应用，至少保护以下三个路径（新增 `/admin/<service>` 无须扩展 Access 路径）：
 
 - `https://mcp.135468.xyz/admin`
 - `https://mcp.135468.xyz/admin/*`
-- `https://mcp.135468.xyz/github/admin`
-- `https://mcp.135468.xyz/github/admin/*`
 - `https://mcp.135468.xyz/authorize`
 
 不要保护 `/`、`/github`、`/oauth/*` 或 `/.well-known/*`：它们需要被标准 MCP/OAuth 客户端访问。请关闭 Access Managed OAuth，保留 MCP Hub 原生 OAuth。配置中填入实际的团队域名（ISSUER）及上述 Access 应用的 Audience（AUD），有多个应用就将 AUD 用逗号连接。
@@ -67,7 +65,7 @@ Cloudflare Worker
 
 **Worker 原生 Access 身份优先**：MCP Hub 在 Cloudflare 已对当前 Worker 调用认证时优先读取可信 `ctx.access`，严格要求 `ctx.access.aud` 属于 `MCP_ACCESS_AUD` 且身份提供商返回有效的用户邮箱，并为该单次请求绑定脱敏主体标识。只有原生 Access 上下文不存在时，才回退现有的请求头 JWT / Cookie 验签流程。若存在原生上下文但 AUD 不匹配或身份不完整，则直接拒绝，不允许以其他 JWT 绕过。未通过 Cloudflare Access 的 Worker 调用不会获得可信的 `ctx.access`。不依赖 `ctx.access` 的子 Worker Service Binding 或静态资源路由仍采用原有 JWT 验证。仅使用原生上下文不代表自动验证 MFA 策略；仍须在 Zero Trust 强制执行并做实际登录验收。
 
-**Access JWT 到达 Worker 的检查**：浏览器登录成功后，Cloudflare 应为受保护请求注入 `Cf-Access-Jwt-Assertion`；浏览器也可能带有 `CF_Authorization` Cookie。当原生 Worker Access 上下文不可用时，MCP Hub 优先验证请求头，只有请求头完全缺失时才验证 Cookie；两者均执行相同的 RSA 签名、Issuer、AUD、有效期与用户身份校验。若请求头存在但无效，不会以 Cookie 绕过；二者均无效则继续返回 403，浏览器得到说明页面，API 仍返回 JSON。**此兼容逻辑不是 Access 应用路径配置的替代品**：`/admin`、`/admin/*`、`/github/admin`、`/github/admin/*`、`/authorize` 必须在 Access 应用中受到保护。若为不同路径配置了多个 Access 应用，`MCP_ACCESS_AUD` 应准确包含这些应用的 Audience，并严格核对访问策略。
+**Access JWT 到达 Worker 的检查**：浏览器登录成功后，Cloudflare 应为受保护请求注入 `Cf-Access-Jwt-Assertion`；浏览器也可能带有 `CF_Authorization` Cookie。当原生 Worker Access 上下文不可用时，MCP Hub 优先验证请求头，只有请求头完全缺失时才验证 Cookie；两者均执行相同的 RSA 签名、Issuer、AUD、有效期与用户身份校验。若请求头存在但无效，不会以 Cookie 绕过；二者均无效则继续返回 403，浏览器得到说明页面，API 仍返回 JSON。**此兼容逻辑不是 Access 应用路径配置的替代品**：`/admin`、`/admin/*`、`/authorize` 必须在 Access 应用中受到保护。若为不同路径配置了多个 Access 应用，`MCP_ACCESS_AUD` 应准确包含这些应用的 Audience，并严格核对访问策略。
 
 上线验收建议依次检查：未登录访问 `/admin` 是否被 Cloudflare Access 拦截；完成通行密钥/IdP 认证后是否进入 MCP Hub 6 位动态码页面；完成 TOTP 后是否进入管理后台；没有 Access 身份令牌、错误 AUD、伪造签名和已过期 JWT 是否继续被拒绝；MCP 公共 OAuth/MCP 接口是否保持原有行为。
 
@@ -83,7 +81,7 @@ Cloudflare Access 自 2026 年起支持 **Cloudflare 账号作为登录身份提
 
 1. 在 Cloudflare Zero Trust → **Integrations → Identity providers** 中添加或选中 **Cloudflare**；启用 `Restrict to account members`，并在 MCP Hub Access 应用的 **Login methods** 仅允许 Cloudflare 登录。关闭该应用的 Email One-time PIN（其他应用的 OTP 不需要全局删除）。
 2. 在 **Access controls → Access settings → Independent MFA** 先启用组织级 MFA 能力并允许 **Authenticator application**；然后在 MCP Hub Access 应用或适用策略上**强制要求该 MFA**。先在 App Launcher 完成验证器注册（团队域名 `https://<your-team>.cloudflareaccess.com/AddMfaDevice`）。**不要只依赖 Cloudflare Dashboard 账号启用了 2FA 这一事实代替 Access 应用级 MFA 配置**。 如果 Cloudflare 账号登录时已完成 MFA，而 Access 又提示第二次验证，可在 Access 的 **Use identity provider MFA** 中启用 AMR 匹配（仅在 IdP 实际返回可接受的 `amr` 时跳过重复提示）；否则 Access 仍会独立要求 MFA。请以实际登录验收为准，不要为减少一次提示而关闭应用的 MFA 强制要求。
-3. 应用 **Allow Policy** 使用 Cloudflare Account Member 和/或本人身份限制；禁止 Allow Everyone、Bypass 或非预期的替代登录方式。确保 `/admin`、`/admin/*`、`/github/admin`、`/github/admin/*` 和 `/authorize` 均受相同或等效强度的 Access Policy 保护，确认实际 AUD 与部署 Variables 一致。
+3. 应用 **Allow Policy** 使用 Cloudflare Account Member 和/或本人身份限制；禁止 Allow Everyone、Bypass 或非预期的替代登录方式。确保 `/admin`、`/admin/*` 和 `/authorize` 均受相同或等效强度的 Access Policy 保护，确认实际 AUD 与部署 Variables 一致。
 4. **先保持旧模式验收 Cloudflare 登录和 MFA**：新浏览器无 Access 会话应被拦截；通过 Cloudflare 账号登录应被强制要求验证器 6 位码；未通过 MFA 不能进入 MCP Hub 的旧 TOTP 页面；无法用邮件 OTP 绕过；无有效签名、错误 AUD、过期 JWT 均应拒绝。
 5. 上述验收通过后，才在 **Action Worker 仓库 Actions Variables** 中设置 `MCP_AUTH_MODE=cloudflare-mfa`，通过中央手动部署服务发布最新主分支。验收：Access 成功后直接进入管理后台（后台自动签发短期签名 Session/CSRF Cookie）、OAuth 授权仍须明确点击确认但不再要求第二个 TOTP；写操作仍需逐项审批；退出登录应跳转 Cloudflare Access 注销入口。
 6. 回退只需把 `MCP_AUTH_MODE` 改回 `access-totp`，并经中央部署。为了安全回退，**本阶段仍保留原有 `MCP_TOTP_SECRET` GitHub Secret 及其部署必需校验**，不会生成新 TOTP 密钥或覆盖旧加密密钥。生产模式切换与 Cloudflare Access Policy 修改均需要分别留存验收记录。
