@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 新增: MCP Hub 运行时密钥交由 Action Worker 的 GitHub Actions Secrets 统一维护，中央生产部署在验证白名单及密钥格式后同步至 Cloudflare Worker；未声明密钥保留旧值，加密密钥要求使用原始材料并显式确认。
+
 - 新增: 管理后台与 OAuth 授权接入 Cloudflare Access 和 6 位动态验证码，增加重放保护。
 
 - 维护: 声明共享 Pre-flight 检查，不复制中央校验器，也不变更生产密钥或部署流程。
