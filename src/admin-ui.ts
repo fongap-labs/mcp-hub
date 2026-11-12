@@ -58,6 +58,14 @@ const COPY=${JSON.stringify(ADMIN_BROWSER_COPY)};
     try{await api('/admin/api/client-approval',{clientId:b.dataset.client,approved:false});location.reload()}
     catch(e){result.textContent=e.message}
   }));
+  document.querySelectorAll('.delete-client').forEach(b=>b.addEventListener('click',async()=>{
+    const name=b.dataset.clientName||'';
+    const clientId=b.dataset.client||'';
+    if(!confirm(COPY.deleteClientPrefix+name+' ('+clientId+')'+COPY.deleteClientSuffix))return;
+    b.disabled=true;
+    try{await api('/admin/api/client-delete',{clientId,confirmClientId:clientId});location.reload()}
+    catch(e){b.disabled=false;result.textContent=e.message}
+  }));
   document.querySelectorAll('.approve-operation').forEach(b=>b.addEventListener('click',async()=>{
     if(!confirm(COPY.approveOperationConfirm))return;
     try{const response=await api('/admin/api/operation',{id:b.dataset.operation,action:'approve'});result.textContent=JSON.stringify(response);location.reload()}
