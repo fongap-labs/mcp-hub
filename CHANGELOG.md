@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 新增: Cloudflare Access 独立 MFA 登录可在显式启用后取代本地重复 TOTP，管理后台自动建立受签名保护的 CSRF 会话，OAuth 授权保留确认操作与现有安全边界。
+
 - 修复: Access 允许符合标准的带双引号浏览器授权 Cookie，仍执行完整签名、AUD、Issuer 与有效期校验；无效请求头继续优先拒绝。
 
 - 修复: Access 浏览器登录兼容经签名验证的授权 Cookie，保留请求头优先和无效头拒绝；为浏览器 403 增加清晰提示，不影响 API 与二次 TOTP。
