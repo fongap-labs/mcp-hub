@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { TaskSubmissionError } from './authorized-task-producer.mjs';
 import { createTrustedRuntimeTaskPort, flushRuntimeReconciliations } from './runtime-task-port.mjs';
 
 const RUNNER_ID = /^runner_[A-Za-z0-9_-]{43}$/;
@@ -7,6 +8,7 @@ const DISPATCH_ID = /^dispatch_[A-Za-z0-9_-]{43}$/;
 const LEASE_ID = /^lease_[A-Za-z0-9_-]{43}$/;
 const REF = /^[A-Za-z0-9._:-]{1,200}$/;
 const MAX_BODY = 4096;
+const MAX_SUBMISSION_BODY = 32768;
 const ROUTES = new Set(['/runtime/v1/tasks/execute', '/runtime/v1/tasks/cancel']);
 
 function hashCredential(credential) {
@@ -54,6 +56,20 @@ function send(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+async function readSubmission(req) {
+  if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(req.headers['content-type'] || '')) {
+    throw new TypeError('invalid_task_content_type');
+  }
+  let size = 0;
+  const parts = [];
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_SUBMISSION_BODY) throw new TypeError('task_submission_too_large');
+    parts.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(parts).toString('utf8'));
+}
+
 async function readOffer(req) {
   if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(req.headers['content-type'] || '')) {
     throw new TypeError('invalid_runtime_content_type');
@@ -87,7 +103,7 @@ async function readOffer(req) {
  * executor.execute(task, context) is the separately provisioned Coding Engine.
  * No arbitrary commands, shell or GitHub permission is exposed by this module.
  */
-function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, executor }) {
+function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, executor, taskProducer = null }) {
   if (!journal || typeof journal.claimAcceptedTask !== 'function' ||
       typeof journal.beginSideEffects !== 'function' || typeof journal.complete !== 'function' ||
       !runtimeClient || typeof runtimeClient.get !== 'function' ||
@@ -95,12 +111,30 @@ function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, e
       !executor || typeof executor.execute !== 'function') {
     throw new TypeError('runtime_components_required');
   }
+  if (taskProducer !== null && typeof taskProducer.submit !== 'function') {
+    throw new TypeError('invalid_task_producer');
+  }
   const authenticate = buildAuthenticator(runnerCredentials);
   const active = new Map();
 
   return createServer(async (req, res) => {
-    // No CORS, cookies or anonymous endpoints. Unknown methods cannot mutate.
+    // No CORS or cookies. User admission never shares Runner authentication.
     const target = req.url || '';
+    if (target === '/runtime/v1/tasks/submit' && taskProducer !== null) {
+      if (req.method !== 'POST') return send(res, 404, { error: 'runtime_route_not_found' });
+      let body;
+      try { body = await readSubmission(req); }
+      catch { return send(res, 400, { error: 'invalid_task_request' }); }
+      try {
+        const result = await taskProducer.submit({ authorization: req.headers.authorization, body });
+        return send(res, result.replayed ? 200 : 202, result);
+      } catch (error) {
+        if (error instanceof TaskSubmissionError) {
+          return send(res, error.status, { error: error.code });
+        }
+        return send(res, 503, { error: 'runtime_task_submission_unavailable' });
+      }
+    }
     if (!ROUTES.has(target) || req.method !== 'POST') {
       return send(res, 404, { error: 'runtime_route_not_found' });
     }
