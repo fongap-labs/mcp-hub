@@ -96,7 +96,7 @@ test('MCP client deletion is authenticated, confirmed, CSRF-protected, atomic an
     const html=await page.text();
     assert.match(html,/delete-client danger/);
     assert.match(html,/data-client-name="ChatGPT"/);
-    assert.match(html,/\>删除\<\/button>/);
+    assert.match(html,/data-client="mcp_[A-Za-z0-9_-]{43}"/);
     const cookie=page.headers.get('Set-Cookie')?.split(';')[0];
     const session=await getSession(new Request(origin+'/admin',{headers:{...jwt,Cookie:cookie}}),env);
     assert.ok(session?.csrf);
