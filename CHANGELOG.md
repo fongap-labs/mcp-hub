@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 修复: 部署时可选写入模式、内容模式和 OAuth TTL 未设置或为空时使用安全默认值，仍严格校验非空配置。
+
 - 新增: MCP Hub 运行时密钥交由 Action Worker 的 GitHub Actions Secrets 统一维护，中央生产部署在验证白名单及密钥格式后同步至 Cloudflare Worker；未声明密钥保留旧值，加密密钥要求使用原始材料并显式确认。
 
 - 新增: 管理后台与 OAuth 授权接入 Cloudflare Access 和 6 位动态验证码，增加重放保护。
