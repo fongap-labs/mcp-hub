@@ -87,7 +87,7 @@ async function readOffer(req) {
  * executor.execute(task, context) is the separately provisioned Coding Engine.
  * No arbitrary commands, shell or GitHub permission is exposed by this module.
  */
-export function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, executor }) {
+function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, executor }) {
   if (!journal || typeof journal.claimAcceptedTask !== 'function' ||
       typeof journal.beginSideEffects !== 'function' || typeof journal.complete !== 'function' ||
       !runtimeClient || typeof runtimeClient.get !== 'function' ||
