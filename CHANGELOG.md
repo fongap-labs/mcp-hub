@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 维护: 同步 MCP Hub 已验证的生产部署记录、中央运维密钥来源和服务级后台 Access 路径，区分 Cloudflare MFA 与本地 TOTP；不更改代码、密钥或发布配置。
+
 - 新增: 管理后台 OAuth 客户端增加独立“删除”操作，管理员二次确认后在 D1 单事务中删除注册和所有令牌/授权请求，拒绝未执行的待审批写操作，保留历史审计；执行中的写操作不允许直接删除。
 
 - 新增: MCP Hub 全局管理入口 /admin 与按模块划分的 /<service>/admin；GitHub 连接管理迁移到 /github/admin，不修改原有 OAuth Resource 和 MCP 工具路径。
