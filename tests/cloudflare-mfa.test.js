@@ -18,11 +18,16 @@ function database(){
     '0001_init.sql','0002_refresh_token_rotation.sql',
     '0003_resource_tool_policy.sql','0003_runner_registry_leases.sql','0005_admin_totp.sql'
   ])sqlite.exec(readFileSync(new URL('../migrations/'+filename,import.meta.url),'utf8'));
-  const db={prepare(query){return{bind(...args){return{
-    first:async()=>sqlite.prepare(query).get(...args)||null,
-    all:async()=>({results:sqlite.prepare(query).all(...args)}),
-    run:async()=>sqlite.prepare(query).run(...args)
-  }}}}};
+  const db={prepare(query){return{
+    bind(...args){return{
+      first:async()=>sqlite.prepare(query).get(...args)||null,
+      all:async()=>({results:sqlite.prepare(query).all(...args)}),
+      run:async()=>sqlite.prepare(query).run(...args)
+    }},
+    first:async()=>sqlite.prepare(query).get()||null,
+    all:async()=>({results:sqlite.prepare(query).all()}),
+    run:async()=>sqlite.prepare(query).run()
+  }}};
   return {sqlite,db};
 }
 
