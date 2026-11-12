@@ -57,7 +57,7 @@ export default {
       if(path==='/control/dispatch/cancel'&&request.method==='POST')return cancelDispatch(request,env);
       if(path==='/control/dispatch/reconcile'&&request.method==='POST')return reconcileDispatch(request,env);
       if(path==='/authorize')return request.method==='GET'?authorizeGet(request,env):request.method==='POST'?authorizePost(request,env):json({error:'Method not allowed'},405);
-      if(path.startsWith('/admin'))return adminRoute(request,env);
+      if(path.startsWith('/admin'))return await adminRoute(request,env);
       const mcpServer=serverForPath(path);
       if(mcpServer){
         const auth=await validateMcpToken(request,env,mcpServer);
