@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
 import worker from '../src/index.ts';
 import {accessIdentity} from '../src/access.ts';
+import {renderAccessDenied} from '../src/i18n/zh-CN.ts';
 import {accessFixture,accessIssuer,accessAud} from './helpers/access.js';
 
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
@@ -25,7 +26,7 @@ test('Access permits a signed application cookie only when the assertion header 
     assert.equal((await worker.fetch(signedCookie,env)).status,200);
     const login=await worker.fetch(signedHeader,env);
     assert.equal(login.status,200);
-    assert.match(await login.text(),/6 位动态验证码/);
+    assert.match(await login.text(),/totp_code/);
 
     assert.equal(await accessIdentity(new Request(origin+'/admin',{
       headers:{Cookie:cookie,'Cf-Access-Jwt-Assertion':'malformed-assertion'}
@@ -54,7 +55,7 @@ test('Browser Access denial is explanatory; machine APIs retain JSON and both fa
   assert.match(browser.headers.get('Content-Security-Policy'),/default-src 'none'/);
   const page=await browser.text();
   assert.match(page,/Cloudflare Access/);
-  assert.match(page,/6 位动态验证码/);
+  assert.equal(page,renderAccessDenied());
   assert.doesNotMatch(page,/MCP_TOTP_SECRET|CF_Authorization=/);
   assert.equal((await worker.fetch(request('/authorize'),{})).status,403);
 
