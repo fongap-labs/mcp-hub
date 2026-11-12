@@ -125,6 +125,7 @@ export function createAuthorizedTaskProducer({
       const resourceKey = 'repo:' + task.repository.replace('/', '_');
       const savedTask = {
         repository: task.repository, sourceSha: task.sourceSha, prompt: task.prompt,
+        authorizedActorId: user.id,
       };
       const digest = createHash('sha256').update(JSON.stringify(savedTask)).digest('hex');
       let created = false;
