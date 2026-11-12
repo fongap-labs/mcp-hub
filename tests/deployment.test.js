@@ -88,7 +88,7 @@ test('central entrypoint requires Cloudflare credentials, not runtime secrets',a
   assert.match(r.stderr,/Required Cloudflare deployment credential is unavailable/);
   assert.doesNotMatch(r.stdout+r.stderr,/npm install|wrangler deploy|migrations apply/);
 });
-test('central entrypoint rejects any inherited runtime secret before deployment',async()=>{
+test('central entrypoint still rejects retired authentication keys',async()=>{
   if(process.platform==='win32')return;
   const {spawnSync}=await import('node:child_process');
   const script=new URL('../scripts/deploy.sh',import.meta.url);
@@ -96,36 +96,64 @@ test('central entrypoint rejects any inherited runtime secret before deployment'
     DEPLOY_SOURCE_REPOSITORY:'fongap-labs/mcp-hub',DEPLOY_ENVIRONMENT:'production',
     GITHUB_REPOSITORY:'fongap-labs/action-worker',
     CLOUDFLARE_API_TOKEN_SECONDARY:'synthetic-credential'};
-  for(const name of ['MCP_ADMIN_KEY','MCP_APPROVAL_KEY','MCP_TOTP_SECRET','MCP_COOKIE_KEY',
-    'MCP_KEYRING_JSON','MCP_INGEST_JWK','MCP_RUNTIME_KEY'])delete vars[name];
-  for(const name of ['MCP_ADMIN_KEY','MCP_APPROVAL_KEY','MCP_TOTP_SECRET','MCP_COOKIE_KEY',
-    'MCP_KEYRING_JSON','MCP_INGEST_JWK','MCP_RUNTIME_KEY']){
+  for(const name of ['MCP_ADMIN_KEY','MCP_APPROVAL_KEY','MCP_TOTP_SECRET',
+    'MCP_COOKIE_KEY','MCP_KEYRING_JSON','MCP_INGEST_JWK','MCP_RUNTIME_KEY'])delete vars[name];
+  for(const name of ['MCP_ADMIN_KEY','MCP_APPROVAL_KEY']){
     const r=spawnSync('bash',[script.pathname],{env:{...vars,[name]:'synthetic-secret'},encoding:'utf8'});
     assert.equal(r.status,77,name);
     assert.match(r.stderr,/Worker runtime Secret must not be passed to deployment/,name);
     assert.doesNotMatch(r.stdout+r.stderr,/npm install|wrangler deploy|migrations apply/,name);
   }
 });
-test('source manifest and deployment scripts do not transfer runtime secrets',async()=>{
+test('source manifest scopes GitHub-managed Worker Secrets',async()=>{
   const {readFileSync}=await import('node:fs');
   const required=readFileSync(new URL('../.github/deploy.secrets.required',import.meta.url),'utf8');
   const allowed=readFileSync(new URL('../.github/deploy.secrets.allowed',import.meta.url),'utf8');
-  assert.deepEqual(required.trim().split(/\r?\n/),['CLOUDFLARE_API_TOKEN_SECONDARY']);
-  assert.doesNotMatch(allowed,/^MCP_[A-Z_]+$/m);
+  assert.deepEqual(required.trim().split(/\r?\n/),['CLOUDFLARE_API_TOKEN_SECONDARY','MCP_TOTP_SECRET']);
+  for(const name of ['MCP_COOKIE_KEY','MCP_KEYRING_JSON','MCP_INGEST_JWK','MCP_RUNTIME_KEY'])
+    assert.match(allowed,new RegExp('^'+name+'$', 'm'));
+  assert.doesNotMatch(allowed,/^MCP_ADMIN_KEY$|^MCP_APPROVAL_KEY$/m);
   const manifest=JSON.parse(readFileSync(new URL('../.github/deploy.json',import.meta.url),'utf8'));
   assert.deepEqual(Object.keys(manifest.environments),['production']);
   const script=readFileSync(new URL('../scripts/deploy.sh',import.meta.url),'utf8');
-  assert.doesNotMatch(script,/--secrets-file|prepare-worker-secrets|worker-secrets\.json/);
-  assert.match(script,/wrangler deploy --config "\$config"/);
-  const pkg=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
-  assert.doesNotMatch(pkg.scripts['cf:deploy'],/--secrets-file/);
-  const config=buildWranglerConfig(loadDeployConfig(env()));
-  for(const name of SECRET_NAMES)assert.equal(Object.hasOwn(config.vars,name),false);
+  assert.match(script,/runtime-secrets\.mjs prepare/);
+  assert.match(script,/wrangler deploy --secrets-file "\$secrets" --config "\$config"/);
+  assert.match(script,/rm -rf "\$work"/);
+  const cfg=buildWranglerConfig(loadDeployConfig(env()));
+  for(const name of SECRET_NAMES)assert.equal(Object.hasOwn(cfg.vars,name),false);
   const types=readFileSync(new URL('../src/types.ts',import.meta.url),'utf8');
   for(const name of SECRET_NAMES)assert.match(types,new RegExp(name+'\\??: string'));
   const runtime=readFileSync(new URL('../src/control/dispatch.ts',import.meta.url),'utf8');
   assert.match(runtime,/env\.MCP_RUNTIME_KEY/);
   assert.match(runtime,/runtimeAuth\(request, env\)/);
+});
+test('GitHub runtime Secret bundle is minimal, validated and never prints values',async()=>{
+  const {selectRuntimeSecrets,writeRuntimeSecretsFile}=await import('../scripts/runtime-secrets.mjs');
+  const {mkdtempSync,readFileSync,statSync,rmSync}=await import('node:fs');
+  const {tmpdir}=await import('node:os');
+  const {join}=await import('node:path');
+  const secret='A'.repeat(32);
+  const base={MCP_TOTP_SECRET:secret,MCP_ACTIVE_ID:'v1'};
+  assert.deepEqual(selectRuntimeSecrets(base),{MCP_TOTP_SECRET:secret});
+  assert.throws(()=>selectRuntimeSecrets({...base,MCP_TOTP_SECRET:'short'}),/MCP_TOTP_SECRET/);
+  assert.throws(()=>selectRuntimeSecrets({...base,MCP_ADMIN_KEY:'deprecated'}),/MCP_ADMIN_KEY/);
+  assert.throws(()=>selectRuntimeSecrets({...base,MCP_COOKIE_KEY:'too-short'}),/MCP_COOKIE_KEY/);
+  assert.throws(()=>selectRuntimeSecrets({...base,MCP_RUNTIME_KEY:'too-short'}),/MCP_RUNTIME_KEY/);
+  const keyring=JSON.stringify({v1:Buffer.alloc(32).toString('base64')});
+  const jwk=JSON.stringify({kty:'RSA',d:'test-private-exponent'});
+  const crypto={...base,MCP_KEYRING_JSON:keyring,MCP_INGEST_JWK:jwk};
+  assert.throws(()=>selectRuntimeSecrets(crypto),/MCP_CRYPTO_SECRET_SYNC/);
+  assert.throws(()=>selectRuntimeSecrets({...base,MCP_KEYRING_JSON:keyring,MCP_CRYPTO_SECRET_SYNC:'confirmed'}),/both original keys/);
+  assert.deepEqual(selectRuntimeSecrets({...crypto,MCP_CRYPTO_SECRET_SYNC:'confirmed'}),{
+    MCP_TOTP_SECRET:secret,MCP_KEYRING_JSON:keyring,MCP_INGEST_JWK:jwk});
+  const temp=mkdtempSync(join(tmpdir(),'mcp-deploy-secrets-'));
+  try {
+    const file=join(temp,'worker-secrets.json');
+    assert.equal(writeRuntimeSecretsFile(file,base),1);
+    assert.deepEqual(JSON.parse(readFileSync(file,'utf8')),{MCP_TOTP_SECRET:secret});
+    if(process.platform!=='win32')assert.equal(statSync(file).mode&0o077,0);
+    assert.throws(()=>writeRuntimeSecretsFile(file,base),/EEXIST/);
+  }finally{rmSync(temp,{recursive:true,force:true})}
 });
 test('central deploy removes credentials from npm child processes',async()=>{
   const {readFileSync}=await import('node:fs');
