@@ -147,7 +147,8 @@ test('token bound to wrong Runner identity cannot claim another Runner lease', a
   const runtime = await start(env, { async execute() { calls++; } },
     [{ runnerId: anotherRunner, token: otherToken }]);
   try {
-    const response = await sendRaw(runtime.origin, '/runtime/v1/tasks/execute', offer, otherToken);
+    const response = await sendRaw(runtime.origin, '/runtime/v1/tasks/execute',
+      { dispatchId, leaseId, taskRef, resourceKey }, otherToken);
     assert.equal(response.status, 409);
     assert.equal(calls, 0);
     assert.equal(env.journal.recoveryPlan()[0].state, 'dispatched');
