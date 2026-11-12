@@ -120,8 +120,9 @@ test('MCP client deletion is authenticated, confirmed, CSRF-protected, atomic an
 test('in-flight GitHub writes block deletion; a D1 batch failure rolls back every credential deletion',async()=>{
   const {sqlite,db}=database();
   const auth=await accessFixture();
-  const env={MCP_DB:db,MCP_ACCESS_ISSUER:accessIssuer,MCP_ACCESS_AUD:accessAud,
-    MCP_AUTH_MODE:'cloudflare-mfa',MCP_COOKIE_KEY:'Z'.repeat(48)};
+  const env={MCP_DB:db,MCP_PUBLIC_URL:origin,MCP_ACCESS_ISSUER:accessIssuer,
+    MCP_ACCESS_AUD:accessAud,MCP_AUTH_MODE:'cloudflare-mfa',MCP_COOKIE_KEY:'Z'.repeat(48),
+    GMC_WRITE_MODE:'disabled',GMC_CONTENT_MODE:'disabled'};
   const originalFetch=globalThis.fetch;
   globalThis.fetch=async()=>Response.json(auth.jwks);
   try{
