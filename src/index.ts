@@ -1,5 +1,5 @@
 import type { Env } from './types.ts';
-import {json} from './util.ts';
+import {json,html} from './util.ts';
 import {BRAND_ICON} from './brand.ts';
 import {accessIdentity} from './access.ts';
 import {protectedMetadata,serverMetadata,registerClient,authorizeGet,authorizePost,tokenEndpoint,revokeToken,validateMcpToken,challenge,cleanExpired} from './oauth.ts';
@@ -9,6 +9,23 @@ import {processMcp} from './gateway/router.ts';
 import {heartbeatRunner,registerRunner} from './control/runner-registry.ts';
 import {acceptRunnerDispatch,cancelDispatch,consumeDispatchQueue,createDispatch,getDispatchStatus,maintainDispatches,
   nextRunnerDispatch,reconcileDispatch,renewRunnerDispatch,rejectRunnerDispatch,reportRunnerQuota} from './control/dispatch.ts';
+
+// Browser navigations get an actionable message rather than raw JSON. API
+// clients retain their existing JSON error contract. Authentication remains
+// fail-closed and this response never starts a new login session.
+function accessDenied(request: Request): Response {
+  const accept=request.headers.get('Accept')||'';
+  if(request.method!=='GET'||!accept.includes('text/html')) {
+    return json({error:'Cloudflare Access required'},403);
+  }
+  return html(`<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP Hub · 身份验证未完成</title></head><body><main>
+<h1>需要 Cloudflare Access 身份验证</h1>
+<p>请先完成 Cloudflare Access 登录，然后再输入手机验证器的 6 位动态验证码。</p>
+<p>若已经登录仍看到此页面，请联系管理员检查 Access 应用的路径范围和 Audience（AUD）配置。</p>
+<p><a href="/admin">重新检查管理后台登录</a></p>
+</main></body></html>`,403);
+}
 
 export default {
   async fetch(request: Request,env: Env): Promise<Response> {
@@ -21,7 +38,7 @@ export default {
           dispatchEnabled:Boolean(env.MCP_RUNTIME_KEY&&env.MCP_RUNTIME_KEY.length>=32&&env.MCP_DISPATCH_QUEUE)},ready?200:503);
       }
       // Access + TOTP protect human-facing routes; machine MCP and OAuth token endpoints stay public.
-      if((path==='/authorize'||path==='/admin'||path.startsWith('/admin/')) && !(await accessIdentity(request,env))) return json({error:'Cloudflare Access required'},403);
+      if((path==='/authorize'||path==='/admin'||path.startsWith('/admin/')) && !(await accessIdentity(request,env))) return accessDenied(request);
       const metadataServer=serverForMetadata(path);
       if(metadataServer)return protectedMetadata(env,metadataServer);
       if(path==='/.well-known/oauth-authorization-server')return serverMetadata(env);
