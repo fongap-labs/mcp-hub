@@ -7,7 +7,7 @@ const REPO = /^fongap-labs\/[A-Za-z0-9_.-]{1,100}$/;
 const SHA = /^[0-9a-f]{40}$/;
 const TASK = /^task_[a-f0-9]{64}$/;
 
-function gitCommand(cwd, args) {
+export function gitCommand(cwd, args, { binary = false } = {}) {
   const nullPath = process.platform === 'win32' ? 'NUL' : '/dev/null';
   const env = {
     PATH: process.env.PATH,
@@ -22,13 +22,14 @@ function gitCommand(cwd, args) {
   };
   const cleaned = Object.fromEntries(Object.entries(env).filter(([, value]) => typeof value === 'string'));
   try {
-    return execFileSync('git', [
+    const output = execFileSync('git', [
       '-c', 'credential.helper=',
       '-c', 'core.hooksPath=' + nullPath,
       '-c', 'protocol.ext.allow=never',
       ...args,
-    ], { cwd, env: cleaned, encoding: 'utf8', timeout: 60_000,
-      maxBuffer: 64 * 1024, stdio: ['ignore','pipe','ignore'] }).trim();
+    ], { cwd, env: cleaned, encoding: binary ? undefined : 'utf8', timeout: 60_000,
+      maxBuffer: 1024 * 1024, stdio: ['ignore','pipe','ignore'] });
+    return binary ? output : output.trim();
   } catch {
     // Never expose Git stderr, task contents, credential helpers or URLs.
     throw new Error('workspace_git_operation_failed');
@@ -56,7 +57,7 @@ function gitRepoUrl(repository) {
   return 'https://github.com/' + repository + '.git';
 }
 
-function worktreeKey(taskRef) {
+export function worktreeKey(taskRef) {
   return createHash('sha256').update(taskRef).digest('hex').slice(0, 24);
 }
 

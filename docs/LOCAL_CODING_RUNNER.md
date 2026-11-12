@@ -39,7 +39,7 @@ Both processes use the same independently provisioned MCP_RUNNER_RUNTIME_TOKEN f
 
 ## Remaining integration
 
-The optional [GitHub-verified local task producer](AUTHORIZED_TASK_INTAKE.md) can now create Runtime journal tasks and dispatch them after independent GitHub user and repository checks. These files do not provide public task intake, GitHub actor bypass, PR publishing or a remote service. Runtime can now clone a missing approved public repository from its canonical GitHub HTTPS origin and prepare an isolated feature worktree; private repositories require a separately provisioned checkout with read access. DSH Delta Code is a Harness plugin, not a standalone execution engine in this release.
+The optional [GitHub-verified local task producer](AUTHORIZED_TASK_INTAKE.md) can now create Runtime journal tasks and dispatch them after independent GitHub user and repository checks. These files do not provide public task intake, GitHub actor bypass, or a remote service. [Trusted GitHub PR delivery](GITHUB_PR_DELIVERY.md) can now open review-only PRs after the original authorized user re-authenticates. Runtime can now clone a missing approved public repository from its canonical GitHub HTTPS origin and prepare an isolated feature worktree; private repositories require a separately provisioned checkout with read access. DSH Delta Code is a Harness plugin, not a standalone execution engine in this release.
 
 Automated tests use simulated Claude child-process and Hub HTTP responses. Validate real Claude Code and GitHub end-to-end execution in an isolated workspace before production release.
 

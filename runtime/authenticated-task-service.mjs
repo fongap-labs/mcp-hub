@@ -103,7 +103,7 @@ async function readOffer(req) {
  * executor.execute(task, context) is the separately provisioned Coding Engine.
  * No arbitrary commands, shell or GitHub permission is exposed by this module.
  */
-function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, executor, taskProducer = null }) {
+function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, executor, taskProducer = null, taskDelivery = null }) {
   if (!journal || typeof journal.claimAcceptedTask !== 'function' ||
       typeof journal.beginSideEffects !== 'function' || typeof journal.complete !== 'function' ||
       !runtimeClient || typeof runtimeClient.get !== 'function' ||
@@ -113,6 +113,9 @@ function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, e
   }
   if (taskProducer !== null && typeof taskProducer.submit !== 'function') {
     throw new TypeError('invalid_task_producer');
+  }
+  if (taskDelivery !== null && typeof taskDelivery.deliver !== 'function') {
+    throw new TypeError('invalid_task_delivery');
   }
   const authenticate = buildAuthenticator(runnerCredentials);
   const active = new Map();
@@ -133,6 +136,21 @@ function createRuntimeTaskService({ journal, runtimeClient, runnerCredentials, e
           return send(res, error.status, { error: error.code });
         }
         return send(res, 503, { error: 'runtime_task_submission_unavailable' });
+      }
+    }
+    if (target === '/runtime/v1/tasks/deliver' && taskDelivery !== null) {
+      if (req.method !== 'POST') return send(res, 404, { error: 'runtime_route_not_found' });
+      let body;
+      try { body = await readSubmission(req); }
+      catch { return send(res, 400, { error: 'invalid_delivery_request' }); }
+      try {
+        const result = await taskDelivery.deliver({ authorization: req.headers.authorization, body });
+        return send(res, 200, result);
+      } catch (error) {
+        if (error instanceof TaskSubmissionError) {
+          return send(res, error.status, { error: error.code });
+        }
+        return send(res, 503, { error: 'runtime_delivery_unavailable' });
       }
     }
     if (!ROUTES.has(target) || req.method !== 'POST') {
