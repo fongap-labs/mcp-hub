@@ -29,7 +29,7 @@ test('Generates exact approved MCP Hub bindings, no credentials or runtime secre
  assert.deepEqual(cfg.routes,[{pattern:'mcp.135468.xyz',custom_domain:true}]);
  for(const s of SECRET_NAMES)assert.ok(!JSON.stringify(cfg).includes(s));
  assert.ok(!JSON.stringify(cfg).includes('synthetic-credential'));
- assert.equal(Object.keys(cfg.vars).length,8);
+ assert.equal(Object.keys(cfg.vars).length,9);
 });
 test('treats missing, empty and whitespace-only optional deployment settings as defaults',()=>{
   for (const overrides of [
