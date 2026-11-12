@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 修复: 正常部署默认保留 Cloudflare 历史加密密钥；显式确认后才同步已核验的原始 Keyring/JWK，避免 GitHub Secret 已配置但未确认时阻断发布。
+
 - 修复: 部署时可选写入模式、内容模式和 OAuth TTL 未设置或为空时使用安全默认值，仍严格校验非空配置。
 
 - 新增: MCP Hub 运行时密钥交由 Action Worker 的 GitHub Actions Secrets 统一维护，中央生产部署在验证白名单及密钥格式后同步至 Cloudflare Worker；未声明密钥保留旧值，加密密钥要求使用原始材料并显式确认。
