@@ -176,10 +176,12 @@ export function createRunnerDaemon({
 
       // Once acceptance has been attempted, any failure is ambiguous.
       // Never retry acceptance or task execution automatically.
-      const acceptance = await runner.accept(offer.dispatchId, offer.leaseId);
-      if (!acceptance || acceptance.ok !== true) throw new Error('runner_accept_rejected');
+      // Acceptance may succeed remotely even when its response is lost.
+      // Keep the offer locally *before* the request so failure can fence it.
       const flight = { offer, cancelling: false };
       active = flight;
+      const acceptance = await runner.accept(offer.dispatchId, offer.leaseId);
+      if (!acceptance || acceptance.ok !== true) throw new Error('runner_accept_rejected');
       nextRenew = now + renewMs;
       notify({ type: 'accepted', dispatchId: offer.dispatchId });
       if (stopped || quarantined) {
