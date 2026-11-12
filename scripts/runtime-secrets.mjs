@@ -37,10 +37,17 @@ export function selectRuntimeSecrets(env) {
   if (secrets.MCP_RUNTIME_KEY && secrets.MCP_RUNTIME_KEY.length < 32) {
     throw new Error('MCP_RUNTIME_KEY must contain at least 32 characters');
   }
-  const syncingKeyring = Boolean(secrets.MCP_KEYRING_JSON);
-  const syncingJwk = Boolean(secrets.MCP_INGEST_JWK);
-  if (syncingKeyring || syncingJwk) {
-    if (!syncingKeyring || !syncingJwk || env.MCP_CRYPTO_SECRET_SYNC !== 'confirmed') {
+  const cryptoSync = env.MCP_CRYPTO_SECRET_SYNC ?? '';
+  if (cryptoSync !== '' && cryptoSync !== 'confirmed') {
+    throw new Error('MCP_CRYPTO_SECRET_SYNC must be blank or confirmed');
+  }
+  if (cryptoSync !== 'confirmed') {
+    // Normal deployment: leave existing Cloudflare crypto Secrets untouched,
+    // even when their original values are available in GitHub Actions Secrets.
+    delete secrets.MCP_KEYRING_JSON;
+    delete secrets.MCP_INGEST_JWK;
+  } else {
+    if (!secrets.MCP_KEYRING_JSON || !secrets.MCP_INGEST_JWK) {
       throw new Error('Crypto Secret sync requires both original keys and MCP_CRYPTO_SECRET_SYNC=confirmed');
     }
     const ring = jsonObject(secrets.MCP_KEYRING_JSON, 'MCP_KEYRING_JSON');

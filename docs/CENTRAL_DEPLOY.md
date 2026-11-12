@@ -117,7 +117,9 @@ Main Write Guard bypass=禁用
 
 中央校验来源和审批后执行 `scripts/deploy.sh`：隔离依赖安装与测试 → Wrangler dry-run → 校验 GitHub TOTP / 可选 Secrets → 以临时 0600 JSON 和 `wrangler deploy --secrets-file` 同版本发布代码与密钥 → 远端健康检查。临时文件只在 Runner 中存在，退出时删除，不能进入提交、产物或日志。未声明的可选 Secret 不会被删除。
 
-首次将历史加密密钥迁移到 GitHub 时，**必须使用旧值**。只有 `MCP_KEYRING_JSON` 和 `MCP_INGEST_JWK` 两个原值同时作为 GitHub Secrets 存在，并经独立核对，才设置 `MCP_CRYPTO_SECRET_SYNC=confirmed`；迁移验收后可删除此确认变量，以阻止后续意外覆盖。
+正常生产发布时，即使 GitHub Secrets 中保存了 `MCP_KEYRING_JSON`、`MCP_INGEST_JWK`，**也不会自动下发或覆盖 Cloudflare 中的历史加密密钥**。只有明确执行密钥同步时，才使用一次性确认开关。
+
+首次将历史加密密钥迁移到 GitHub 时，**必须使用旧值**。只有 `MCP_KEYRING_JSON` 和 `MCP_INGEST_JWK` 两个原值同时作为 GitHub Secrets 存在，并经独立核对，才设置 `MCP_CRYPTO_SECRET_SYNC=confirmed`。本次迁移验收后应清除此确认变量，恢复默认不覆盖模式。错误或不完整的显式同步配置仍会被拒绝。
 
 ## 5. 回滚约束
 
