@@ -1,4 +1,6 @@
-# 运维迁移与验收手册
+# 运维迁移与验收手册（历史记录）
+
+> **当前部署配置已调整**：2026-11-12 起运行时 Secrets 由 Action Worker 的 GitHub Actions Secrets 按中央白名单同步到 Cloudflare。本文保留旧部署版本的历史说明，不能再作为密钥归属的操作依据。请优先阅读 [中央部署操作](CENTRAL_DEPLOY.md)。
 
 > **2026-11-11 认证更新**：本页涉及 `MCP_ADMIN_KEY`、`MCP_APPROVAL_KEY` 的部分仅记录旧版本迁移状态。当前新版本改为 Cloudflare Access + 验证器 6 位 TOTP；生产上线前置条件和 Secret 见 [中央部署操作](CENTRAL_DEPLOY.md)。请勿依本页旧认证密钥清单配置新版本。
 
