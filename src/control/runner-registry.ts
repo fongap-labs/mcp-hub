@@ -9,7 +9,7 @@ import { bodyJson, json, now, randomId, sha } from '../util.ts';
 const RUNNER_TOKEN_PREFIX = 'mcrn_';
 const MIN_LEASE_TTL_SECONDS = 60;
 const MAX_LEASE_TTL_SECONDS = 900;
-const RUNNER_SCOPES = ['runner:register', 'runner:heartbeat'] as const;
+const RUNNER_SCOPES = ['runner:register', 'runner:heartbeat', 'runner:dispatch', 'runner:quota'] as const;
 
 export type RunnerRegistryErrorCode = 'invalid_request' | 'not_found' | 'forbidden' | 'conflict' | 'unavailable';
 export class RunnerRegistryError extends Error {
