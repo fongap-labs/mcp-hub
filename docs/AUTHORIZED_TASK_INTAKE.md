@@ -36,3 +36,6 @@ Use a suitable GitHub user token directly against the local Runtime. It is used 
 The real local HTTP and SQLite regression tests are in tests/authorized-task-intake.test.js. Live GitHub token, Claude Code and GitHub PR E2E acceptance remain separate work.
 
 Preparing Git worktrees and delivering a PR through Action Worker's existing identity and CI gate are later coding tasks; this local intake never bypasses them.
+
+
+A completed and Hub-acknowledged task may be delivered by its original verified GitHub user through [Trusted GitHub PR delivery](GITHUB_PR_DELIVERY.md). The submission token is not persisted, and this does not bypass central governance.
