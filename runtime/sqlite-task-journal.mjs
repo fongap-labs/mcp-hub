@@ -197,6 +197,26 @@ export class RuntimeTaskJournal {
     });
   }
 
+  /** Fence a task only when the authenticated Runner owns the exact
+   * durable dispatch/lease. Idempotent for already fenced/terminal work. */
+  fenceOwnedTask(taskRef, runnerId, leaseId, dispatchId) {
+    valid(taskRef, REF, 'task_ref'); valid(runnerId, RUNNER, 'runner_id');
+    valid(leaseId, LEASE, 'lease_id'); valid(dispatchId, DISPATCH, 'dispatch_id');
+    return this.#tx(() => {
+      const row = this.#row(taskRef);
+      if (row.runner_id !== runnerId || row.lease_id !== leaseId ||
+          row.dispatch_id !== dispatchId) {
+        throw new Error('runtime_lease_not_authorized');
+      }
+      if (['uncertain','completed','failed','cancelled'].includes(row.state)) return row.state;
+      if (row.state !== 'claimed' && row.state !== 'started') {
+        throw new Error('runtime_task_conflict');
+      }
+      this.#transition(taskRef, row.state, 'uncertain');
+      return 'uncertain';
+    });
+  }
+
   requestCancellation(taskRef) {
     valid(taskRef, REF, 'task_ref');
     return this.#tx(() => {

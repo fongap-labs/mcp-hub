@@ -43,6 +43,15 @@ The optional [GitHub-verified local task producer](AUTHORIZED_TASK_INTAKE.md) ca
 
 Automated tests use simulated Claude child-process and Hub HTTP responses. Validate real Claude Code and GitHub end-to-end execution in an isolated workspace before production release.
 
+## Lease fencing and shutdown safety
+
+- Every trusted Runtime executing a Coding Engine independently verifies the assigned Hub Runner ID, dispatch ID, lease ID, accepted status and unexpired lease on a bounded recurring interval and again immediately before recording completion.
+- A failed Hub lookup or expired/mismatched lease causes a **durable uncertain hold** before the executor's AbortSignal is triggered. Work cannot be marked complete or replayed automatically after the hold.
+- A Runner with an in-flight acceptance or execution requests an authenticated, ownership-bound Runtime fence on renewal failure or a shutdown signal. The fence does not depend on the lease still being unexpired.
+- When Runner execution is unresolved or its fence cannot be confirmed, the single-instance lock is retained after shutdown. Check the Hub dispatch, Runtime journal and old process before manual recovery. A clean idle shutdown may remove the lock.
+- Runtime cancellation similarly stores the uncertain outcome and signals the active executor; neither Runner nor Runtime claims a cancelled CLI subprocess performed no side effects.
+- A hung or uncooperative subprocess can outlive cancellation on some hosts. Deployment still requires OS/container process isolation and a real cancellation drill; this Node implementation is not a substitute for an OS process supervisor.
+
 ## Automatic Git worktree preparation
 
 `runtime/git-worktree-preparer.mjs` now runs inside the trusted Runtime immediately before Claude execution. It uses `MCP_APPROVED_WORKSPACES_JSON` as an allowlist of canonical repository names and absolute **base checkout** paths (not per-task worktree paths).

@@ -33,6 +33,7 @@ export async function startCodingRunner(env = process.env) {
   // manually; automatic stale-lock removal could permit duplicate execution.
   const lockPath = resolve(sequencePath) + '.lock';
   const lockHandle = openSync(lockPath, 'wx', 0o600);
+  let safeToUnlock = false;
   try {
     const daemon = createRunnerDaemon({
       runner,
@@ -52,10 +53,14 @@ export async function startCodingRunner(env = process.env) {
     } finally {
       process.removeListener('SIGINT', stop);
       process.removeListener('SIGTERM', stop);
+      await daemon.shutdown();
+      // Never silently release the single-instance lock after a lost lease,
+      // active shutdown or ambiguous task outcome. Operator review is needed.
+      safeToUnlock = !daemon.status.requiresReview && !daemon.status.quarantined;
     }
   } finally {
     closeSync(lockHandle);
-    unlinkSync(lockPath);
+    if (safeToUnlock) unlinkSync(lockPath);
   }
 }
 

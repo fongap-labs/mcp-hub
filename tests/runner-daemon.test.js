@@ -37,7 +37,8 @@ function harness(answers = []) {
 }
 function makeDaemon(fx, runner, port, options = {}) {
   return createRunnerDaemon({
-    runner, runtimePort: port, heartbeatSequence: fx.sequence,
+    runner, runtimePort: { async fenceTask() { return {status:'outcome_uncertain'}; }, ...port },
+    heartbeatSequence: fx.sequence,
     displayName: 'Test Coding Runner', capabilities: ['coding.patch'],
     maxConcurrency: 1, heartbeatMs: 1000, renewMs: 500,
     pollMs: 100, clock: () => 10000, ...options,
@@ -186,9 +187,95 @@ test('invalid options fail before a Runner connects', () => {
   const fx = fixture(), { runner } = harness();
   try {
     assert.throws(() => createRunnerDaemon({
-      runner, runtimePort: { loadAcceptedTask() {}, cancellationRequested() {} },
+      runner, runtimePort: { loadAcceptedTask() {}, cancellationRequested() {}, fenceTask() {} },
       heartbeatSequence: fx.sequence, displayName: 'runner', capabilities: ['coding.patch'],
       maxConcurrency: 2,
     }), /runner_single_flight_required/);
   } finally { fx.cleanup(); }
+});
+
+
+test('renewal rejection fences active Runtime task and quarantines Runner', async () => {
+  const fx = fixture();
+  const job = deferred();
+  let clock = 0, fences = 0, executions = 0;
+  const {runner,calls} = harness([{ action:'offer', dispatch: offer }]);
+  runner.renew = async () => { throw new Error('lease lost'); };
+  const daemon = makeDaemon(fx, runner, {
+    async loadAcceptedTask() { executions++; return job.promise; },
+    async cancellationRequested() {},
+    async fenceTask(given) { fences++; assert.equal(given.leaseId,offer.leaseId);
+      return {status:'outcome_uncertain'}; },
+  }, { clock:()=>clock });
+  try {
+    await daemon.tick();
+    await new Promise(r=>setImmediate(r));
+    assert.equal(executions,1);
+    clock = 1001;
+    await daemon.tick();
+    assert.equal(fences,1);
+    assert.equal(daemon.status.quarantined,true);
+    assert.equal(daemon.status.requiresReview,true);
+    const count = calls.filter(x=>x[0]==='accept').length;
+    await daemon.tick();
+    assert.equal(calls.filter(x=>x[0]==='accept').length,count);
+    job.resolve({status:'outcome_uncertain'});
+    await new Promise(r=>setImmediate(r));
+  } finally { fx.cleanup(); }
+});
+
+test('lost accept response fences the ambiguously accepted offer without starting Runtime', async () => {
+  const fx=fixture(), {runner,calls}=harness([{action:'offer',dispatch:offer}]);
+  let executed=0, fences=0;
+  runner.accept=async () => { calls.push(['accept',offer.dispatchId]); throw Error('response lost'); };
+  const daemon=makeDaemon(fx,runner,{
+    async loadAcceptedTask(){executed++;return finished;},
+    async cancellationRequested(){},
+    async fenceTask(given){assert.equal(given.dispatchId,offer.dispatchId);fences++;},
+  });
+  try {
+    await daemon.tick();
+    assert.equal(fences,1);
+    assert.equal(executed,0);
+    assert.equal(daemon.status.requiresReview,true);
+    assert.equal(daemon.status.quarantined,true);
+  } finally {fx.cleanup();}
+});
+
+test('graceful shutdown fences active work before releasing control', async () => {
+  const fx=fixture(), job=deferred(), {runner}=harness([{action:'offer',dispatch:offer}]);
+  let fences=0;
+  const daemon=makeDaemon(fx,runner,{
+    async loadAcceptedTask(){return job.promise;},
+    async cancellationRequested(){},
+    async fenceTask(){fences++;return {status:'outcome_uncertain'};},
+  });
+  try {
+    await daemon.tick();
+    await new Promise(r=>setImmediate(r));
+    daemon.stop();
+    await daemon.shutdown();
+    assert.equal(fences,1);
+    assert.equal(daemon.status.stopped,true);
+    assert.equal(daemon.status.requiresReview,true);
+    job.resolve({status:'outcome_uncertain'});
+    await new Promise(r=>setImmediate(r));
+  } finally{fx.cleanup();}
+});
+
+test('fence transport failure retains manual-review state',async()=>{
+  const fx=fixture(),job=deferred(),{runner}=harness([{action:'offer',dispatch:offer}]);
+  const daemon=makeDaemon(fx,runner,{
+    async loadAcceptedTask(){return job.promise;},
+    async cancellationRequested(){},
+    async fenceTask(){throw Error('Runtime unreachable');},
+  });
+  try{
+    await daemon.tick();
+    await new Promise(r=>setImmediate(r));
+    await daemon.shutdown();
+    assert.equal(daemon.status.requiresReview,true);
+    job.resolve({status:'outcome_uncertain'});
+    await new Promise(r=>setImmediate(r));
+  } finally{fx.cleanup();}
 });

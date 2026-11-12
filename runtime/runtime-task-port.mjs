@@ -16,6 +16,24 @@ export function createTrustedRuntimeTaskPort({ journal, runtimeClient, authentic
     async loadAcceptedTask(offer) {
       return journal.claimAcceptedTask(offer, authenticatedRunnerId, runtimeClient);
     },
+    async fenceRequested(offer) {
+      // A Runner unable to renew or shutting down may fence ONLY its own
+      // currently assigned task. Expired leases still need to be stoppable.
+      if (!offer || typeof offer.dispatchId !== 'string' ||
+          typeof offer.leaseId !== 'string') {
+        throw new TypeError('invalid_runtime_fence');
+      }
+      const record = await runtimeClient.get(offer.dispatchId);
+      if (record.dispatch_id !== offer.dispatchId ||
+          record.runner_id !== authenticatedRunnerId ||
+          record.lease_id !== offer.leaseId ||
+          record.task_ref !== offer.taskRef ||
+          record.resource_key !== offer.resourceKey) {
+        throw new Error('runtime_fence_not_authorized');
+      }
+      journal.fenceOwnedTask(offer.taskRef, authenticatedRunnerId,
+        offer.leaseId, offer.dispatchId);
+    },
     async cancellationRequested(offer) {
       // The Runner cannot turn an arbitrary taskRef into a cancellation order.
       if (!offer || typeof offer.dispatchId !== 'string' || typeof offer.leaseId !== 'string') {
