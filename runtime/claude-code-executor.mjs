@@ -60,7 +60,7 @@ export function createClaudeCodeExecutor({
         '-p', '--output-format', 'json',
         '--permission-mode', 'dontAsk',
         '--tools', 'Read,Glob,Grep,Edit,Write',
-        '--allowedTools', 'Read,Glob,Grep,Edit,Write',
+        '--allowedTools', 'Read', 'Glob', 'Grep', 'Edit', 'Write',
         '--strict-mcp-config', '--disallowedTools', 'mcp__*',
         '--no-session-persistence', '--max-turns', String(maxTurns),
       ];
