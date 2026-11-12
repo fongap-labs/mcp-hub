@@ -7,9 +7,13 @@ import type { RunnerHeartbeatRequest, RunnerRegistrationRequest } from './runner
  * Importable by Node (type stripping) or other standards-based Runtimes.
  */
 export class HubBridgeError extends Error {
-  constructor(readonly status: number, readonly code: string) {
+  readonly status: number;
+  readonly code: string;
+  constructor(status: number, code: string) {
     super(code);
     this.name = 'HubBridgeError';
+    this.status = status;
+    this.code = code;
   }
 }
 
