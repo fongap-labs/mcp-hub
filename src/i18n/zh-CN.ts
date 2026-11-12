@@ -19,7 +19,13 @@ export function renderAccessDenied(isMfaOnly=false): string {
 }
 
 export const ADMIN_BROWSER_COPY = {
-  missingPublicKey: '无法取得加密公钥',
+  missingPublicKey: '服务端返回的 RSA 加密公钥无效，请检查 MCP_INGEST_JWK。',
+  publicKeySessionExpired: '管理员会话已失效，请重新打开 /admin 完成登录后再试。',
+  publicKeyAccessDenied: 'Cloudflare Access 拒绝了 /admin/api/public-key，请核对 /admin/* 的 Access 应用与 Cookie Path 设置。',
+  publicKeyServerUnavailable: '服务端 RSA 加密私钥不可用，请核对现有 MCP_INGEST_JWK；不要生成新密钥覆盖旧值。',
+  publicKeyNetworkError: '无法连接加密公钥接口，请检查网络与 Cloudflare Access 状态。',
+  publicKeyInvalidResponse: '加密公钥接口没有返回合法 JSON，请检查 Access 登录或代理拦截。',
+  publicKeyRequestFailed: '加密公钥接口请求失败',
   requestFailed: '操作失败',
   saved: '已保存 ',
   deletePrefix: '确定删除 ',
