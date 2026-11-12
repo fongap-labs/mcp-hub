@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 修复: 部署健康检查实际导入验证现有 RSA 私钥与活动 AES 密钥，密钥不可用则返回 503 并阻止发布绿灯；不会生成或覆盖 Secret。
+
 - 修复: GitHub 管理员添加账号时区分 Access、Session 与加密公钥错误；校验现有 RSA 私钥可导入，返回安全的 503 错误码，不覆盖任何密钥。
 
 - 修复: 服务管理统一为 `/admin/<service>`，GitHub 为 `/admin/github`；删除旧 `/github/admin`，不跳转、不兼容；共享 Access 登录，MCP/OAuth 路径不变。
