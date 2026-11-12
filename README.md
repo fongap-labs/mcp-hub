@@ -6,7 +6,7 @@
 
 MCP Hub 为不同模块提供统一的 OAuth 客户端管理、权限策略和受保护的管理后台。当前 GitHub 模块支持连接多个 GitHub 用户名／组织名，Worker 根据仓库所属 Owner 精确选择加密凭据；Agent 无法读取或导出这些 Token。
 
-**状态**：已通过本地单元测试和带 SQLite 的端到端模拟测试。**尚未在真实 Cloudflare Workers 部署、与实际 GitHub 连接或完成第三方 MCP 客户端互操作验收**。这是可部署的源码工程，不是已上线的服务。当前使用无状态 JSON 响应的 MCP Streamable HTTP 子集，不支持 SSE 服务端推送、资源订阅、Prompt 和会话恢复。请先在测试域名完成验收，再接入真实生产仓库。
+**状态（2026-11-12）**：MCP Hub 已通过 Action Worker 中央流程部署至 Cloudflare Workers；例如 [部署运行 #43176863888](https://github.com/fongap-labs/action-worker/actions/runs/43176863888) 成功发布提交 `5c0a5fe4`，且远程健康、构建身份、OAuth 与 MCP 未授权访问检查通过。此记录**不代表最新 main（含 #76、#77）已发布**，也不代表真实浏览器 Access/MFA、实际 GitHub 授权或第三方 MCP 客户端互操作验收完成。项目已通过本地单元测试和带 SQLite 的模拟测试；目前只实现无状态 JSON 响应的 MCP Streamable HTTP 子集，不支持 SSE 服务端推送、资源订阅、Prompt 和会话恢复。新的 main 版本应先完成中央部署与生产验收。
 
 ## 产品标识和避免混淆
 
@@ -19,7 +19,7 @@ MCP Hub 为不同模块提供统一的 OAuth 客户端管理、权限策略和�
 
 | 环节 | 机制 |
 | --- | --- |
-| MCP 首次连接 | OAuth 授权码 + PKCE S256。浏览器先通过 Cloudflare Access，再输入验证器 App 的 6 位动态码；不再需要独立固定授权密码 |
+| MCP 首次连接 | OAuth 授权码 + PKCE S256。浏览器先通过 Cloudflare Access；默认 `access-totp` 仍需 MCP Hub 本地 TOTP。仅当 Access 已强制执行 MFA 且明确配置 `MCP_AUTH_MODE=cloudflare-mfa` 时，才不再重复输入本地验证码；OAuth 同意仍需明确确认 |
 | 客户端注册 | 动态注册；**默认禁止访问**，管理员在 `/admin` 批准后才允许 OAuth 登录 |
 | 客户端权限 | 每个客户端指定允许的 GitHub Owner；Access Token 默认 15 分钟有效（最高可配置 1 小时）；注册时声明 `refresh_token` 的客户端可获得 30 天滚动 Refresh Token，授权最长 90 天 |
 | GitHub Token 录入 | 管理员通过 `/admin` 输入；浏览器使用 RSA-OAEP-256 加密随机 AES-256-GCM 密钥，再用 AES-GCM 加密 Token；传输同时使用 HTTPS |
@@ -28,7 +28,7 @@ MCP Hub 为不同模块提供统一的 OAuth 客户端管理、权限策略和�
 | GitHub 请求 | Worker 按需解密，仅发送到 `https://api.github.com` 的 `Authorization: Bearer ...` 请求头，HTTPS；响应只返回受控字段 |
 | 路由 | 按 owner 大小写不敏感精确映射；未配置、停用、未授权时立即拒绝，**绝不回退其他 GitHub Token** |
 | 写操作 | 默认关闭。仅启用 `GMC_WRITE_MODE=approval`、为客户端批准写权限、用户在 OAuth 中同意后才可提交；**创建 Issue 仍需管理员在 `/admin` 逐次审批，10 分钟过期** |
-| 管理界面 | 与 MCP 工具完全隔离；Cloudflare Access + 一次性动态码（TOTP），配合 HMAC 签名 HttpOnly/Secure/SameSite Cookie、CSRF 验证和严格 CSP |
+| 管理界面 | 与 MCP 工具隔离；Cloudflare Access 身份及已强制的 MFA、按 `MCP_AUTH_MODE` 控制的本地 TOTP（默认开启），配合 HMAC 签名 HttpOnly/Secure/SameSite Cookie、CSRF 验证和严格 CSP；`/admin` 管理 Hub，`/github/admin` 管理 GitHub 模块 |
 | 日志与响应 | 无 Token 导出接口；不记录 Header、请求体、GitHub 错误原文或异常堆栈；已知 GitHub Token 字样会尝试脱敏 |
 | 撤销 | 管理员可停用/删除 Github 连接，或撤销 MCP 客户端；撤销客户端时其访问令牌立即失效 |
 
@@ -45,7 +45,7 @@ MCP Hub 为不同模块提供统一的 OAuth 客户端管理、权限策略和�
 
 **不要把 GitHub PAT、MCP_TOTP_SECRET、MCP_RUNTIME_KEY、MCP_KEYRING_JSON 或 MCP_INGEST_JWK 粘贴给 Agent。** 以下命令也不要求你把真实 Token 放进终端或聊天历史；GitHub Token 只在部署后的管理员网页填写。
 
-**管理方式（新版本）**：通过 Cloudflare Access 后输入验证器 App 的 6 位 TOTP 动态码；管理会话 30 分钟，OAuth 授权也需单独输入一次性动态码。发布前必须配置 Access 保护的精确路径、`MCP_ACCESS_ISSUER`、`MCP_ACCESS_AUD` 和 Cloudflare Worker Secret `MCP_TOTP_SECRET`，否则部署应停止。详细步骤见 [中央部署操作](docs/CENTRAL_DEPLOY.md)。
+**管理方式**：默认 `access-totp` 需 Cloudflare Access 身份验证加 MCP Hub 独立 TOTP；已验证 Access 应用级 MFA 后，可通过 `MCP_AUTH_MODE=cloudflare-mfa` 改为不重复输入本地动态码。管理会话为 30 分钟，OAuth 授权仍需主动确认。生产发布必须保持 `/admin`、`/admin/*`、`/github/admin`、`/github/admin/*` 和 `/authorize` 的 Access 保护、有效的 `MCP_ACCESS_ISSUER`/`MCP_ACCESS_AUD`，以及中央合同要求的 `MCP_TOTP_SECRET`（用于安全回退）。详见 [中央部署操作](docs/CENTRAL_DEPLOY.md)。
 
 ## MCP Hub 部署边界
 
@@ -53,16 +53,17 @@ MCP Hub 为不同模块提供统一的 OAuth 客户端管理、权限策略和�
 
 ### 统一交由 Action Worker 部署
 
-MCP Hub 与 AI Gateway 共用 [Action Worker → 手动 · 部署服务](https://github.com/fongap-labs/action-worker/actions/workflows/deploy-source-script.yml) 的 `source-script` 部署合同。MCP Hub 仓库**不保留独立部署工作流**。中央先验证不可变 main SHA、CI Evidence、Main Write Guard、环境和 runner 策略，再运行审核过的 `scripts/deploy.sh`。仅允许 `production` 手动部署，`mcp-hub-ops` 不用于生产部署。
+MCP Hub 与 AI Gateway 共用 [Action Worker → 手动 · 部署服务](https://github.com/fongap-labs/action-worker/actions/workflows/deploy-source-script.yml) 的 `source-script` 部署合同。MCP Hub 仓库**不保留独立部署工作流**。中央先验证不可变 main SHA、CI Evidence、Main Write Guard、环境和 runner 策略，再运行审核过的 `scripts/deploy.sh`。仅允许目标 `production` 手动部署；按 Action Worker 中央凭据路由从 `mcp-hub-ops` 读取受限部署 Secrets，`mcp-hub-ops` 自身不记录生产 Deployment。
 
 | 配置位置 | 名称 |
 | --- | --- |
-| Action Worker · Actions Variables | `CLOUDFLARE_ACCOUNT_ID_SECONDARY`, `MCP_D1_ID`, `MCP_PUBLIC_URL=https://mcp.135468.xyz`, `MCP_ACTIVE_ID`, `MCP_ACCESS_ISSUER`, `MCP_ACCESS_AUD`, `MCP_OAUTH_TTL`, `GMC_WRITE_MODE`, `GMC_CONTENT_MODE` |
-| Action Worker · `production` Environment Secrets | `CLOUDFLARE_API_TOKEN_SECONDARY`（运维人员核实配置） |
-| Action Worker · `mcp-hub-ops` Environment | 专属运维任务；不向部署 Job 提供业务密钥 |
-| Cloudflare · `mcp-hub` Worker Secrets | `MCP_TOTP_SECRET`, `MCP_COOKIE_KEY`, `MCP_KEYRING_JSON`, `MCP_INGEST_JWK`；可选 `MCP_RUNTIME_KEY` |
+| Action Worker · Actions Variables | `CLOUDFLARE_ACCOUNT_ID_SECONDARY`, `MCP_D1_ID`, `MCP_PUBLIC_URL=https://mcp.135468.xyz`, `MCP_ACTIVE_ID`, `MCP_ACCESS_ISSUER`, `MCP_ACCESS_AUD`, `MCP_AUTH_MODE`, `MCP_OAUTH_TTL`, `GMC_WRITE_MODE`, `GMC_CONTENT_MODE` |
+| Action Worker · Actions Secrets（仓库级或 `mcp-hub-ops`） | 必需 `CLOUDFLARE_API_TOKEN_SECONDARY`、`MCP_TOTP_SECRET`；可选 `MCP_COOKIE_KEY`、`MCP_KEYRING_JSON`、`MCP_INGEST_JWK`、`MCP_RUNTIME_KEY` |
+| Action Worker · `production` | 逻辑部署目标与成功部署记录；不作为 MCP Hub 部署 Secrets 的跨环境读取来源 |
+| Action Worker · `mcp-hub-ops` Environment | 中央部署作业的凭据来源；读取范围受仓库与中央白名单约束，不创建独立生产 Deployment |
+| Cloudflare · `mcp-hub` Worker Secrets | 中央发布时按白名单同步所提供的密钥；省略的可选密钥保留现有值 |
 
-**运行时密钥不经 GitHub 部署中转**：Worker 运行时密钥由 Cloudflare Worker Secrets 管理，并保留原有密钥材料和离线备份；不得重新生成 keyring/JWK 覆盖既有密文。可选 `MCP_RUNTIME_KEY` 仍用于 Worker Runtime 派发授权（至少 32 字符）；普通部署不读取或上传该密钥。停用任一既存 Worker Secret 必须在 Cloudflare 显式删除并核验；部署省略不代表线上删除。安装和测试的子进程不接收运行时凭据。
+**密钥保护**：中央受控发布只同步获授权的 Secret，不能将其改成普通 Variables。历史 Keyring/JWK 必须保留原值并离线备份；普通部署不覆盖，只有同时核对两份原值且显式 `MCP_CRYPTO_SECRET_SYNC=confirmed` 才进行同步，结束后移除确认开关。停用既存 Worker Secret 必须单独在 Cloudflare 执行经验证的删除；仅从 GitHub 删除 Secret 或部署时省略不能证明线上已移除。安装和测试的子进程不接收运行时凭据。
 
 部署入口参数：`source_repository=fongap-labs/mcp-hub`、`environment=production`、`product` 与 `source_sha` 留空，`main_write_guard_bypass=false`。参见 [部署配置说明](docs/CENTRAL_DEPLOY.md)。本次更改不会部署 Cloudflare 或删除旧 D1。
 
@@ -145,7 +146,7 @@ npm run dev
 
 1. **没有任何 Agent 端存储的 GitHub Token**。Agent 只获得 MCP 权限，MCP API 永不提供获取/导出 Token 的工具。
 2. **GitHub Token 在 GitHub API 调用期间确实会短暂出现在 Worker 内存中**，不能用“混淆”或“永不解密”来误导。
-3. `/authorize` 的 6 位动态码必须在真正的 Worker 域名页面输入。恶意 OAuth 客户端可能诱导管理员授权，请核对客户端名、回调地址及允许的 owner。
+3. 默认 `access-totp` 下，`/authorize` 的本地 6 位动态码必须在真正的 Worker 域名页面输入；`cloudflare-mfa` 下应在 Cloudflare Access 完成强制 MFA，OAuth 页面仍须明确同意。恶意客户端可能诱导授权，请核对客户端名、回调地址及允许的 owner。
 4. **没有主张通过审计或认证**。上线前仍需实际 Cloudflare 环境的部署测试、MCP 客户端互操作测试、威胁建模及渗透测试。
 5. 使用 OAuth 登出/撤销管理中的客户端可以阻断所有已发放的 Access Token；如果 GitHub PAT 泄露，需要直接在 GitHub 端撤销。
 
