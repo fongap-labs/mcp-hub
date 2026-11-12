@@ -123,7 +123,12 @@ test('Hub admin and GitHub admin expose separate views without weakening Access 
       'The existing GitHub MCP resource remains a separate OAuth-protected endpoint');
     const js=await worker.fetch(authed('/admin/app.js'),env);
     assert.equal(js.status,200);
-    assert.match(await js.text(),/getElementById\('add'\)\?\.addEventListener/);
+    const browserScript=await js.text();
+    assert.match(browserScript,/getElementById\('add'\)\?\.addEventListener/);
+    assert.match(browserScript,/response.status===401/);
+    assert.match(browserScript,/response.status===403/);
+    assert.match(browserScript,/response.status===503/);
+    assert.match(browserScript,/Cache-Control|cache:'no-store'/);
   }finally{
     globalThis.fetch=originalFetch;
     sqlite.close();
