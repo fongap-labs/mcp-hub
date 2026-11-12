@@ -15,12 +15,12 @@ import {acceptRunnerDispatch,cancelDispatch,consumeDispatchQueue,createDispatch,
 // Browser navigations get an actionable message rather than raw JSON. API
 // clients retain their existing JSON error contract. Authentication remains
 // fail-closed and this response never starts a new login session.
-function accessDenied(request: Request,mfaOnly: boolean): Response {
+function accessDenied(request: Request,isMfaOnly: boolean): Response {
   const accept=request.headers.get('Accept')||'';
   if(request.method!=='GET'||!accept.includes('text/html')) {
     return json({error:'Cloudflare Access required'},403);
   }
-  return html(renderAccessDenied(mfaOnly),403);
+  return html(renderAccessDenied(isMfaOnly),403);
 }
 
 export default {
@@ -36,8 +36,8 @@ export default {
       // Cloudflare Access protects browser routes; local TOTP remains the
       // default until independent Access MFA has been verified and activated.
       if(path==='/authorize'||path==='/admin'||path.startsWith('/admin/')){
-        const mfaOnly=cloudflareMfaOnly(env);
-        if(!(await accessIdentity(request,env)))return accessDenied(request,mfaOnly);
+        const isMfaOnly=cloudflareMfaOnly(env);
+        if(!(await accessIdentity(request,env)))return accessDenied(request,isMfaOnly);
       }
       const metadataServer=serverForMetadata(path);
       if(metadataServer)return protectedMetadata(env,metadataServer);
