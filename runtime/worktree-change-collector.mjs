@@ -13,7 +13,7 @@ const decoder = new TextDecoder('utf-8', { fatal: true });
 function safePath(path) {
   if (!path || isAbsolute(path) || path.startsWith('-') ||
       /[\x00-\x1f\x7f]/.test(path) ||
-      path.split('/').some(p => !p || p === '.' || p === '..' || p === '.git') ||
+      path.includes('\\') || path.split('/').some(p => !p || p === '.' || p === '..' || p.toLowerCase() === '.git') ||
       path.split('/').some(p => p.toLowerCase() === '.github') &&
         /^\.github\/(?:workflows|actions)\//i.test(path) ||
       /(^|\/)(?:\.env(?:\..*)?|\.npmrc|\.pypirc|\.gitmodules)$/i.test(path) ||
