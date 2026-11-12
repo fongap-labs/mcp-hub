@@ -9,7 +9,7 @@ import {accessIdentity} from './access.ts';
 import {verifyTotp} from './totp.ts';
 import {cloudflareMfaOnly} from './auth-mode.ts';
 import {revokeClientTokens} from './tokens.ts';
-import {renderAdminLogin,renderAdminDocument,renderClientRow,renderPendingRow,renderConnectionRow,renderRunnerSection} from './i18n/zh-CN.ts';
+import {renderAdminLogin,renderAdminDocument,renderClientRow,renderPendingRow,renderConnectionRow,renderRunnerSection,renderServiceDirectoryCard} from './i18n/zh-CN.ts';
 import {renderServiceAdminDocument} from './i18n/service-admin.ts';
 import type {McpModule} from './gateway/types.ts';
 import {adminProvisionRunner,adminRevokeRunner,listRunners} from './control/runner-registry.ts';
@@ -93,12 +93,7 @@ export async function adminPage(request: Request,env: Env,service?: McpModule): 
       : `<button type="button" class="revoke-runner danger" data-runner="${escapeHtml(r.runnerId)}">撤销</button>`;
     return `<tr><td><strong>${escapeHtml(r.displayName)}</strong><div><code>${escapeHtml(r.runnerId)}</code></div></td><td>${escapeHtml(r.capabilities.join(', '))}</td><td>${r.activeConcurrency}/${r.maxConcurrency}</td><td>${escapeHtml(r.availability)}</td><td>${escapeHtml(seen)}</td><td>${action}</td></tr>`;
   }).join('');
-  const serviceCards=MCP_MODULES.map(module=>{
-    const id=escapeHtml(module.id);
-    const endpoints=module.endpoints.map(endpoint=>'<code>'+escapeHtml(endpoint.path)+'</code>').join('、');
-    return `<article class="service-card"><h3>${id} MCP</h3><p>${escapeHtml(module.description)}</p>
-      <p class="muted">服务入口：${endpoints}</p><a href="/${encodeURIComponent(module.id)}/admin">管理此服务</a></article>`;
-  }).join('');
+  const serviceCards=MCP_MODULES.map(module=>renderServiceDirectoryCard(module,escapeHtml)).join('');
   const page=renderAdminDocument({session,BRAND_HEAD,BRAND_NAME,BRAND_HEADER,clientRows,pendingRows,serviceCards});
   const runnerSection=renderRunnerSection(runnerRows);
   return html(page.replace('</main>',runnerSection+'</main>'),200,
