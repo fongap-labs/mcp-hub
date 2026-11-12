@@ -50,7 +50,8 @@ function validateOptions({ runner, runtimePort, displayName, capabilities,
                            heartbeatSequence, maxConcurrency, pollMs, heartbeatMs, renewMs }) {
   if (!runner || !['register','heartbeat','next','accept','reject','renew'].every(k => typeof runner[k] === 'function') ||
       !runtimePort || typeof runtimePort.loadAcceptedTask !== 'function' ||
-      typeof runtimePort.cancellationRequested !== 'function') {
+      typeof runtimePort.cancellationRequested !== 'function' ||
+      typeof runtimePort.fenceTask !== 'function') {
     throw new TypeError('runner_client_and_runtime_port_required');
   }
   if (typeof heartbeatSequence?.next !== 'function') throw new TypeError('durable_runner_sequence_required');
@@ -98,10 +99,27 @@ export function createRunnerDaemon({
   let nextHeartbeat = -1;
   let nextRenew = 0;
   const seenCancellations = new Set();
+  let requiresReview = false;
+  let fencing = null;
 
-  const quarantine = error => {
-    quarantined = error instanceof Error ? error.message.slice(0, 100) : 'runner_failure';
-    // Do not log a bearer, task body, or an upstream response.
+  function fenceActive() {
+    if (!active) return Promise.resolve();
+    requiresReview = true;
+    if (!fencing) {
+      const offer = active.offer;
+      // Do not trust the control plane after a lost renewal or stop signal.
+      // If the Runtime fence cannot be confirmed, preserve the process lock.
+      fencing = Promise.resolve().then(() => runtimePort.fenceTask(offer))
+        .catch(() => { requiresReview = true; });
+    }
+    return fencing;
+  }
+
+  const quarantine = () => {
+    if (quarantined) return;
+    quarantined = 'runner_control_plane_unavailable';
+    if (active) void fenceActive();
+    // No secrets, task text or upstream error strings in log events.
     notify({ type: 'quarantined' });
   };
 
@@ -158,11 +176,17 @@ export function createRunnerDaemon({
 
       // Once acceptance has been attempted, any failure is ambiguous.
       // Never retry acceptance or task execution automatically.
-      await runner.accept(offer.dispatchId, offer.leaseId);
+      const acceptance = await runner.accept(offer.dispatchId, offer.leaseId);
+      if (!acceptance || acceptance.ok !== true) throw new Error('runner_accept_rejected');
       const flight = { offer, cancelling: false };
       active = flight;
       nextRenew = now + renewMs;
       notify({ type: 'accepted', dispatchId: offer.dispatchId });
+      if (stopped || quarantined) {
+        quarantine();
+        await fenceActive();
+        return;
+      }
       void Promise.resolve().then(() => runtimePort.loadAcceptedTask(offer)).then(result => {
         if (result?.status === 'reconciliation_pending') {
           quarantine(new Error('runtime_reconciliation_pending'));
@@ -179,7 +203,8 @@ export function createRunnerDaemon({
         if (active === flight) active = null;
       });
     } catch {
-      quarantine(new Error('runner_control_plane_unavailable'));
+      quarantine();
+      await fenceActive();
     } finally {
       locked = false;
     }
@@ -200,10 +225,20 @@ export function createRunnerDaemon({
   }
 
   return {
-    tick, run, stop() { stopped = true; },
+    tick, run,
+    stop() {
+      stopped = true;
+      if (active) void fenceActive();
+    },
+    async shutdown() {
+      stopped = true;
+      await fenceActive();
+      // Review required even if the HTTP request returned 'outcome_uncertain':
+      // a side effect may have occurred before the task was fenced.
+    },
     get status() {
       return Object.freeze({ registered, stopped, quarantined: !!quarantined,
-        activeDispatchId: active?.offer.dispatchId ?? null });
+        requiresReview, activeDispatchId: active?.offer.dispatchId ?? null });
     },
   };
 }
