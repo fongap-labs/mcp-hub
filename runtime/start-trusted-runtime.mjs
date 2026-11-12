@@ -5,6 +5,7 @@ import { RuntimeDispatchClient } from '../src/control/runner-runtime-client.ts';
 import { startLoopbackRuntimeTaskService } from './authenticated-task-service.mjs';
 import { flushRuntimeReconciliations } from './runtime-task-port.mjs';
 import { createClaudeCodeExecutor } from './claude-code-executor.mjs';
+import { createGitWorktreePreparer } from './git-worktree-preparer.mjs';
 import { createAuthorizedTaskProducer } from './authorized-task-producer.mjs';
 
 function requireConfig(env, key) {
@@ -38,6 +39,7 @@ export async function startTrustedRuntime(env = process.env) {
     const executor = createClaudeCodeExecutor({
       executablePath: requireConfig(env, 'MCP_CLAUDE_EXECUTABLE'),
       workspaceRoots,
+      workspacePreparer: createGitWorktreePreparer({ workspaceRoots }),
     });
     // No new tasks until the previous process's incomplete work is safely held.
     journal.recoverAfterRestart();

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 新增: 可信 Runtime 按仓库白名单自动校验 GitHub HTTPS 源、同步 main 并锁定授权提交，在独立 agent/task 工作树运行 Claude Code；拒绝脏目录、源提交漂移及符号链接，增加真实 Git 工作树测试。无生产部署。
+
 - 新增: Runtime 本机可选 GitHub 用户认证任务入口，核验用户身份、仓库写权限与 main 源提交后加密保存任务并幂等派发；保留中央 Agent 身份门禁，补齐请求重放、响应丢失和越权回归测试。
 
 - 修复: Claude CLI 允许工具按独立参数传入，并将 Runner 对外能力限制为已实现的 coding.patch，避免误报测试工具支持。
