@@ -1,6 +1,6 @@
 # 中央部署操作
 
-完整的环境配置、密钥归属、手动部署和上线核对步骤见[运维迁移和验收手册](OPERATIONS_MIGRATION_ACCEPTANCE.md)。
+本文为最新部署合同；[运维迁移和验收手册](OPERATIONS_MIGRATION_ACCEPTANCE.md)记录历史基线，涉及密钥归属的旧说明不再适用。
 
 ## 1. 配置归属
 
