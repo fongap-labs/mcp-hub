@@ -3,6 +3,7 @@ import {json,html} from './util.ts';
 import {BRAND_ICON} from './brand.ts';
 import {accessIdentityFromWorker,type WorkerAccessContext} from './access.ts';
 import {cloudflareMfaOnly} from './auth-mode.ts';
+import {runtimeCryptoReady} from './crypto.ts';
 import {renderAccessDenied} from './i18n/zh-CN.ts';
 import {protectedMetadata,serverMetadata,registerClient,authorizeGet,authorizePost,tokenEndpoint,revokeToken,validateMcpToken,challenge,cleanExpired} from './oauth.ts';
 import {adminRoute,adminPage} from './admin.ts';
@@ -29,7 +30,13 @@ export default {
       const url=new URL(request.url), path=url.pathname;
       if(path==='/brand/icon.svg'&&request.method==='GET')return new Response(BRAND_ICON,{headers:{'Content-Type':'image/svg+xml; charset=utf-8','Cache-Control':'public, max-age=86400','X-Content-Type-Options':'nosniff'}});
       if(path==='/health'&&request.method==='GET'){
-        const ready=Boolean(env.MCP_DB && env.MCP_PUBLIC_URL && env.MCP_ACCESS_ISSUER && env.MCP_ACCESS_AUD && (cloudflareMfaOnly(env)||env.MCP_TOTP_SECRET) && env.MCP_COOKIE_KEY && env.MCP_KEYRING_JSON && env.MCP_ACTIVE_ID && env.MCP_INGEST_JWK);
+        // Deployment readiness must verify key material can actually be
+        // imported. Presence-only checks allowed a green deploy even when
+        // /admin/api/public-key failed with a 503 invalid RSA private JWK.
+        const baseReady=Boolean(env.MCP_DB && env.MCP_PUBLIC_URL &&
+          env.MCP_ACCESS_ISSUER && env.MCP_ACCESS_AUD &&
+          (cloudflareMfaOnly(env)||env.MCP_TOTP_SECRET) && env.MCP_COOKIE_KEY);
+        const ready=baseReady && await runtimeCryptoReady(env);
         return json({status:ready?'ok':'unavailable',ready,build:env.MCP_BUILD_SHA||null,
           dispatchEnabled:Boolean(env.MCP_RUNTIME_KEY&&env.MCP_RUNTIME_KEY.length>=32&&env.MCP_DISPATCH_QUEUE)},ready?200:503);
       }
