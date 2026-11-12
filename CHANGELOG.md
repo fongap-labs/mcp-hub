@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 修复: Claude CLI 允许工具按独立参数传入，并将 Runner 对外能力限制为已实现的 coding.patch，避免误报测试工具支持。
+
 - 新增: Runner 常驻进程、心跳序号持久化、租约续期、取消与故障隔离，分权的 Claude Code CLI 适配，固定工作区和源提交、限制工具权限；执行异常按不确定结果保持并添加回归测试。尚未生产部署。
 
 - 新增: Runtime 本机认证任务执行服务与 Runner 侧私有传输适配，领取前独立身份和租约校验，执行前持久化意图，执行结果加密及对账；新增 HTTP/SQLite 安全回归测试。实际 Coding Engine 与 Runner 实例仍由独立环境提供。

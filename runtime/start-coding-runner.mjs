@@ -39,7 +39,7 @@ export async function startCodingRunner(env = process.env) {
       runtimePort: port,
       heartbeatSequence: sequenceStore,
       displayName: env.MCP_RUNNER_NAME || 'Fongap Coding Runner',
-      capabilities: ['coding.patch','coding.test'],
+      capabilities: ['coding.patch'],
       maxConcurrency: 1,
     });
     const controller = new AbortController();
