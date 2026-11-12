@@ -59,7 +59,7 @@ When accept fails, the Runtime task resolver is never called. When task retrieva
 
 The Hub registry, queue, quota, offer, acceptance, renewal and reconciliation are implemented and tested. The client and handoff adapter are runnable against that protocol.
 
-**Still missing**: a live Delta Coding Runtime or Action Worker Runner process exposing a trusted task-lookup API, credentials for that Runtime-only API, and durable execution/result-journal wiring. The shared MCP endpoint cannot bypass Action Worker's existing private agent-task-ingress GitHub identity restrictions.
+**Integration status**: the repository now includes an opt-in localhost Runtime task execution HTTP service, credential-bound Runner transport, and the durable journal. The actual Delta Coding Engine / Action Worker Runner process and Runtime credential provisioning remain external. The shared MCP endpoint cannot bypass Action Worker's existing private agent-task-ingress GitHub identity restrictions.
 
 No credentials, production endpoints, deployment workflows or background services are added. Deploy only after the remaining code tasks and production acceptance plan are complete.
 
@@ -86,3 +86,57 @@ The Runtime service-side adapter is runtime/runtime-task-port.mjs. It must run i
 Automated tests in tests/runtime-task-journal.test.js exercise real Node SQLite persistence, encrypted reopen, authorised lease-bound task lookup, cancellation, interruption, uncertain side-effects, duplicate suppression, Hub reconciliation and explicit recovery confirmation.
 
 This change is a reusable Node Runtime journal and protocol adapter; it does **not** ship a live Delta Coding Engine, an authenticated task server or a running Action Worker Agent, and it does not change production deployment.
+
+
+## Authenticated local Runtime task server (Node)
+
+The optional Node implementation in runtime/authenticated-task-service.mjs exposes two **localhost-only** POST endpoints. No part of this service is imported into or deployed with the public Cloudflare Worker.
+
+| Endpoint | Purpose |
+|---|---|
+| POST /runtime/v1/tasks/execute | Accepts dispatchId/taskRef/resourceKey/leaseId, independently authenticates the Runner, verifies Hub acceptance and current lease, durably records execution intent, calls the injected Coding Engine, seals the result in Runtime SQLite, then reconciles status with Hub |
+| POST /runtime/v1/tasks/cancel | Confirms the authenticated Runner and Hub's cancel_requested state, records cancellation or uncertain side effects and notifies an active executor via AbortSignal |
+
+The handler has no uncredentialed task lookup endpoint. It never returns a prompt, source code, file paths, executor output, or raw internal errors. Its Runtime-only secret stays server-side; Runner receives a **separately provisioned per-Runner Runtime credential**, independent of the credential used with MCP Hub. Runtime caller identities must be bound to trusted Runner IDs during provisioning, not accepted from caller JSON. The server refuses non-loopback binds. Any future public TLS reverse proxy needs separate authentication/security review.
+
+Runtime process example (Coding Engine remains an injected, independently authorized capability):
+
+~~~js
+import { startLoopbackRuntimeTaskService } from './runtime/authenticated-task-service.mjs';
+import { RuntimeTaskJournal } from './runtime/sqlite-task-journal.mjs';
+import { RuntimeDispatchClient } from './src/control/runner-runtime-client.ts';
+
+const journal = new RuntimeTaskJournal({
+  databasePath: privateRuntimeDatabasePath,
+  encryptionKey: runtimeLocalKey32Bytes,
+});
+const hubClient = new RuntimeDispatchClient(hubHttpsOrigin, runtimeOnlyHubSecret);
+const service = await startLoopbackRuntimeTaskService({
+  journal,
+  runtimeClient: hubClient,
+  runnerCredentials: [{ runnerId: approvedRunnerId, token: separatelyProvisionedRuntimeRunnerToken }],
+  executor: {
+    execute: (task, { signal, taskRef, dispatchId, resourceKey }) =>
+      approvedCodingEngine.execute(task, { signal, taskRef, dispatchId, resourceKey }),
+  },
+});
+~~~
+
+The adapter **refuses startup without a real executor callback**; it does not run a shell, clone repositories, issue GitHub credentials or create permissions on its own. The caller is responsible for authorizing the Coding Engine, constraining its workspace, isolating tools and recording side effects. The Runtime must recover and review unfinished tasks after restart before accepting work.
+
+Runner-side example:
+
+~~~js
+import { createRunnerRuntimeTaskPort } from './runtime/runner-task-transport.mjs';
+import { claimRunnerTask } from './src/control/runner-runtime-client.ts';
+
+const privatePort = createRunnerRuntimeTaskPort({
+  origin: 'http://127.0.0.1:PORT',
+  runnerRuntimeToken: separatelyProvisionedRuntimeRunnerToken,
+});
+const handoff = await claimRunnerTask(hubRunnerClient, privatePort);
+~~~
+
+claimRunnerTask accepts the Hub lease before calling Runtime. The task body and execution result remain inside Runtime. If the client disconnects after acceptance or during execution, **never automatically call execute again**: inspect the persisted task journal and Hub reconciliation first. A 202 reconciliation_pending response means the executor has already finished and its result is durable, not that re-execution is allowed.
+
+Tests: tests/runtime-authenticated-executor.test.js exercise a real localhost HTTP listener and SQLite journal with an injected test executor. They do not validate an actual Delta Coding Engine or production GitHub execution. Neither Cloudflare nor Action Worker's credentials or deployment configuration are changed.
