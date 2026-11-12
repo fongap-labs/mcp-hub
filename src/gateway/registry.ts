@@ -47,10 +47,11 @@ export function moduleForId(id: string): McpModule | undefined {
   return MCP_MODULES.find(module => module.id === id);
 }
 
-// Route service administration only for explicitly registered modules.
+// Route service administration ONLY under /admin/<service> for explicitly
+// registered modules. No legacy /<service>/admin path or redirect is exposed.
 // Public MCP /<service> endpoints and OAuth resources are unaffected.
 export function moduleForAdminPath(path: string): McpModule | undefined {
-  const match = /^\/([a-z][a-z0-9-]*)\/admin\/?$/.exec(path);
+  const match = /^\/admin\/([a-z][a-z0-9-]*)\/?$/.exec(path);
   return match ? moduleForId(match[1]!) : undefined;
 }
 
