@@ -107,7 +107,21 @@ async function guard(request: Request,env: Env): Promise<AdminSession | null> {
 }
 export async function adminApi(request: Request,env: Env,path: string): Promise<Response> {
   if(!(await getSession(request,env)))return json({error:'Unauthorized'},401);
-  if(path==='/admin/api/public-key'&&request.method==='GET')return json(ingestionPublicJwk(env));
+  if(path==='/admin/api/public-key'&&request.method==='GET'){
+    // A deployed Secret can exist but still contain a malformed or non-private
+    // JWK. Fail with a specific safe status instead of an opaque Worker 500.
+    try {
+      const publicJwk=ingestionPublicJwk(env);
+      await crypto.subtle.importKey('jwk',JSON.parse(env.MCP_INGEST_JWK) as JsonWebKey,
+        {name:'RSA-OAEP',hash:'SHA-256'},false,['decrypt']);
+      await crypto.subtle.importKey('jwk',publicJwk,
+        {name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt']);
+      return json(publicJwk,200,{'Cache-Control':'no-store'});
+    }catch{
+      // No private key bytes, key IDs or raw parsing details in HTTP errors.
+      return json({error:'ingestion_public_key_unavailable'},503,{'Cache-Control':'no-store'});
+    }
+  }
   if(path==='/admin/api/runners'&&request.method==='GET')return json({runners:await listRunners(env)});
   if(request.method!=='POST'||!await guard(request,env))return json({error:'Forbidden'},403);
   if(path==='/admin/api/runners/provision')return adminProvisionRunner(env,request);

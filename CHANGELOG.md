@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 修复: GitHub 管理员添加账号时区分 Access、Session 与加密公钥错误；校验现有 RSA 私钥可导入，返回安全的 503 错误码，不覆盖任何密钥。
+
 - 修复: 服务管理统一为 `/admin/<service>`，GitHub 为 `/admin/github`；删除旧 `/github/admin`，不跳转、不兼容；共享 Access 登录，MCP/OAuth 路径不变。
 
 - 修复: Runner 续租失败、接单响应不确定及退出时主动隔离在途任务；Runtime 独立监控 Hub 租约，失效或断联先持久化不确定状态再中断执行，异常退出保留单实例锁，补齐对应安全回归测试。

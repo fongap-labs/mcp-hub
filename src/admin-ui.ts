@@ -33,8 +33,20 @@ const COPY=${JSON.stringify(ADMIN_BROWSER_COPY)};
   }catch{metrics.textContent='派发指标暂不可用'}}
   const enc=b=>btoa(String.fromCharCode(...new Uint8Array(b)));
   async function encryptToken(token){
-    const pub=await(await fetch('/admin/api/public-key',{credentials:'same-origin'})).json();
-    if(!pub.n||!pub.e)throw new Error(COPY.missingPublicKey);
+    let response;
+    try{
+      response=await fetch('/admin/api/public-key',{
+        credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}
+      });
+    }catch{throw new Error(COPY.publicKeyNetworkError)}
+    if(response.status===401)throw new Error(COPY.publicKeySessionExpired);
+    if(response.status===403)throw new Error(COPY.publicKeyAccessDenied);
+    if(response.status===503||response.status===500)throw new Error(COPY.publicKeyServerUnavailable);
+    if(!response.ok)throw new Error(COPY.publicKeyRequestFailed+' (HTTP '+response.status+')');
+    let pub;
+    try{pub=await response.json()}catch{throw new Error(COPY.publicKeyInvalidResponse)}
+    if(!pub||pub.kty!=='RSA'||typeof pub.n!=='string'||!pub.n||
+      typeof pub.e!=='string'||!pub.e||pub.d)throw new Error(COPY.missingPublicKey);
     const rsa=await crypto.subtle.importKey('jwk',pub,{name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt']);
     const aes=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt']);
     const raw=await crypto.subtle.exportKey('raw',aes);

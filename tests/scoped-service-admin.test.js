@@ -72,6 +72,32 @@ test('Hub admin and GitHub admin expose separate views without weakening Access 
     assert.equal(github.status,200,await github.clone().text());
     const githubHtml=await github.text();
     assert.ok(githubHtml.includes('GitHub 服务管理'));
+    const sessionCookie=github.headers.get('Set-Cookie')?.split(';')[0];
+    assert.match(sessionCookie,/^__Host-gmcp-admin=/);
+    const publicKey=()=>worker.fetch(new Request(origin+'/admin/api/public-key',{
+      headers:{'Cf-Access-Jwt-Assertion':fixture.assertion,Cookie:sessionCookie}
+    }),env);
+    assert.equal((await worker.fetch(authed('/admin/api/public-key'),env)).status,401,
+      'Cloudflare identity alone must not bypass the Hub admin session');
+    const missing=await publicKey();
+    assert.equal(missing.status,503);
+    assert.deepEqual(await missing.json(),{error:'ingestion_public_key_unavailable'});
+    assert.equal(missing.headers.get('Cache-Control'),'no-store');
+    env.MCP_INGEST_JWK=JSON.stringify({kty:'RSA',n:'invalid',e:'AQAB',d:'invalid'});
+    assert.equal((await publicKey()).status,503,'Invalid private key must fail closed');
+    const pair=await crypto.subtle.generateKey({
+      name:'RSA-OAEP',modulusLength:2048,
+      publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'
+    },true,['encrypt','decrypt']);
+    env.MCP_INGEST_JWK=JSON.stringify(await crypto.subtle.exportKey('jwk',pair.privateKey));
+    const available=await publicKey();
+    assert.equal(available.status,200);
+    assert.equal(available.headers.get('Cache-Control'),'no-store');
+    const jwk=await available.json();
+    assert.equal(jwk.kty,'RSA');
+    assert.ok(jwk.n&&jwk.e);
+    assert.equal('d' in jwk,false,'The private exponent must never leave Runtime');
+
     assert.match(githubHtml,/GitHub Token/);
     assert.match(githubHtml,/id="add"/);
     assert.ok(githubHtml.includes('非 GitHub 官方 MCP Server'));
@@ -97,7 +123,12 @@ test('Hub admin and GitHub admin expose separate views without weakening Access 
       'The existing GitHub MCP resource remains a separate OAuth-protected endpoint');
     const js=await worker.fetch(authed('/admin/app.js'),env);
     assert.equal(js.status,200);
-    assert.match(await js.text(),/getElementById\('add'\)\?\.addEventListener/);
+    const browserScript=await js.text();
+    assert.match(browserScript,/getElementById\('add'\)\?\.addEventListener/);
+    assert.match(browserScript,/response.status===401/);
+    assert.match(browserScript,/response.status===403/);
+    assert.match(browserScript,/response.status===503/);
+    assert.match(browserScript,/Cache-Control|cache:'no-store'/);
   }finally{
     globalThis.fetch=originalFetch;
     sqlite.close();

@@ -48,6 +48,17 @@ Cloudflare Worker
 
 `AW_REPOSITORY_POLICY` 必须允许此仓库部署。MCP Hub 的逻辑目标环境为 `production`，但中央凭据路由使用 `mcp-hub-ops` 作为该部署 Job 的 Secrets 来源；必需的 `CLOUDFLARE_API_TOKEN_SECONDARY` 与 `MCP_TOTP_SECRET` 必须在仓库级或 `mcp-hub-ops` 可读取，不能只放在 `production` Environment。中央密钥白名单限制源仓库可获取的名称，缺少必需 Secret 即拒绝发布；绝不降级使用明文 Variables。旧有 `MCP_KEYRING_JSON` / `MCP_INGEST_JWK` 如果无法安全取回原始值，请不要重新生成或覆盖，省略这两个可选 GitHub Secrets，Wrangler 将保留 Cloudflare 现有密钥。
 
+### GitHub 连接：加密公钥无法取得
+
+在已登录的管理后台打开 `/admin/api/public-key` 检查 HTTP 状态即可定位问题，**不要复制返回的公钥或任何 Secret 到聊天或日志**：
+
+- **200**：响应包含 RSA 公钥字段 `kty`、`n`、`e`，不包含私钥 `d`；浏览器可继续加密 GitHub Token。
+- **401**：MCP Hub 管理员 Session Cookie 未携带或已过期。重新登录 `/admin`，确认同源 Cookie 可用于 `/admin/api/*`。
+- **403**：Cloudflare Access 没有允许这条管理 API 请求。确保 `/admin` 与 `/admin/*` 属于同一个 Access 应用/AUD，并检查 Cookie Path Attribute。
+- **503** 且返回 `ingestion_public_key_unavailable`：Cloudflare Worker 中现有 `MCP_INGEST_JWK` 缺失、不是合法 RSA **私钥** JWK 或不可导入；查验已有 Secret 的格式与来源，不要擅自生成新 JWK 覆盖旧值。此问题与 GitHub Token 的访问权限无关。
+
+该接口和浏览器脚本都不返回或记录私钥。正常部署默认不覆盖已有 `MCP_INGEST_JWK`。确需同步历史加密密钥时，只能按文档原有 `MCP_CRYPTO_SECRET_SYNC=confirmed` 双密钥核对流程操作；不要为排除此错误擅自开启该开关。
+
 ## 2. Cloudflare Access 与动态码
 
 **管理路径分层**：全局管理中心 `/admin`，单服务管理为 `/admin/<service>`，目前已注册的 GitHub 服务对应 `/admin/github`；服务列表按模块声明自动生成。所有服务级管理请求仍需现有 Access 身份验证及管理员 Session；未知服务拒绝访问。Cloudflare Zero Trust 的 MCP Hub Access 应用只需通过 `/admin` 和 `/admin/*` 保护全部管理页面（包括 `/admin/github` 和未来新增服务），共用**同一 Access 应用、同一 AUD**。不要启用 Bypass 或 Allow Everyone。原有 `/admin` 及 `/admin/api/*` 继续使用，新项目不提供旧服务管理地址的兼容路由或重定向；现有 `/github` OAuth Resource 和 MCP 客户端不受影响。
