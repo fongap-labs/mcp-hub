@@ -58,7 +58,7 @@ export async function accessIdentityFromWorker(
     if(!config || !config.audiences.includes(ctx.access.aud))return null;
     const identity=await ctx.access.getIdentity();
     const email=identity?.email?.trim().toLowerCase()||'';
-    if(email.length<3||email.length>254||!/^[^\\s@]+@[^\\s@]+$/.test(email))return null;
+    if(email.length<3||email.length>254||!/^[^\s@]+@[^\s@]+$/.test(email))return null;
     // Do not expose an email address in the browser-readable signed
     // session body. Native identity is scoped to the exact Access audience.
     const subject='cf:'+await sha(email);
