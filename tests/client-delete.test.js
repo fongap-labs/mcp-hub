@@ -129,10 +129,19 @@ test('in-flight GitHub writes block deletion; a D1 batch failure rolls back ever
     insertClient(sqlite,thirdId);
     insertTokens(sqlite,thirdId);
     insertApproval(sqlite,thirdId,'processing');
-    const page=await worker.fetch(new Request(origin+'/admin',{headers:{'Cf-Access-Jwt-Assertion':auth.assertion}}),env);
-    const cookie=page.headers.get('Set-Cookie')?.split(';')[0];
+    // A deliberately processing audit row must not require a working Admin
+    // dashboard to exercise the independent deletion safety gate. Construct a
+    // correctly signed session using a test-only key and a signed Access user.
+    const csrf='C'.repeat(43);
+    const payload={exp:now+1800,csrf,sub:'admin-identity'};
+    const bytes=new TextEncoder().encode(JSON.stringify(payload));
+    const body=Buffer.from(bytes).toString('base64url');
+    const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.MCP_COOKIE_KEY),
+      {name:'HMAC',hash:'SHA-256'},false,['sign']);
+    const signature=Buffer.from(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(body))).toString('base64url');
+    const cookie='__Host-gmcp-admin='+body+'.'+signature;
     const session=await getSession(new Request(origin+'/admin',{headers:{Cookie:cookie,'Cf-Access-Jwt-Assertion':auth.assertion}}),env);
-    assert.ok(session?.csrf);
+    assert.equal(session?.csrf,csrf);
     const request=()=>new Request(origin+'/admin/api/client-delete',{method:'POST',headers:{
       'Cf-Access-Jwt-Assertion':auth.assertion,Origin:origin,'Content-Type':'application/json',
       'X-CSRF-Token':session.csrf,Cookie:cookie
