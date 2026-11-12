@@ -7,6 +7,15 @@ type AccessJwk = JsonWebKey & { kid?: string };
 interface JwkSet { keys?: AccessJwk[]; }
 const cache = new Map<string,{expires:number;keys:AccessJwk[]}>();
 
+// RFC 6265 permits quoted Cookie values. Only strip the exact wrapper;
+// the resulting JWT must pass the same signature and claim verification.
+function accessCookieToken(request: Request): string {
+  const raw = cookie(request, 'CF_Authorization');
+  return raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')
+    ? raw.slice(1, -1)
+    : raw;
+}
+
 function accessConfig(env: Env): {issuer:string;audiences:string[]} | null {
   const issuer=(env.MCP_ACCESS_ISSUER||'').replace(/\/$/,'');
   const audiences=(env.MCP_ACCESS_AUD||'').split(',').map(s=>s.trim()).filter(Boolean);
@@ -36,7 +45,7 @@ export async function accessIdentity(request: Request,env: Env): Promise<string|
     // Never fall back if a header is present but invalid: this prevents an
     // ambiguous/malformed assertion from being silently overridden.
     const assertion=request.headers.get('Cf-Access-Jwt-Assertion');
-    const token=assertion!==null?assertion:cookie(request,'CF_Authorization');
+    const token=assertion!==null?assertion:accessCookieToken(request);
     if (!config || !token || token.length>16000) return null;
     const parts=token.split('.');
     if (parts.length!==3 || parts.some(s=>!s)) return null;
