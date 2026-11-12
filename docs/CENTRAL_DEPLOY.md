@@ -59,6 +59,9 @@ Cloudflare Worker
 
 该接口和浏览器脚本都不返回或记录私钥。正常部署默认不覆盖已有 `MCP_INGEST_JWK`。确需同步历史加密密钥时，只能按文档原有 `MCP_CRYPTO_SECRET_SYNC=confirmed` 双密钥核对流程操作；不要为排除此错误擅自开启该开关。
 
+**生产部署准入补充**：`/health` 现在会对运行中的原始 `MCP_INGEST_JWK` RSA 私钥以及 `MCP_KEYRING_JSON` 中 `MCP_ACTIVE_ID` 对应的 AES 密钥执行实际导入校验。任一失败就返回 503，中央发布健康检查因此拒绝放行（会触发既定回滚流程），不再把“密钥名存在”误当作可用。此修复只提高验收严格度，**不会自动修复、生成或覆盖**任何 Secret。当前生产密钥已报错时，应先从可信备份核对与恢复原值，再发布本修复；否则发布会因健康检查失败而回滚。恢复前不要发起生产部署。
+
+
 ## 2. Cloudflare Access 与动态码
 
 **管理路径分层**：全局管理中心 `/admin`，单服务管理为 `/admin/<service>`，目前已注册的 GitHub 服务对应 `/admin/github`；服务列表按模块声明自动生成。所有服务级管理请求仍需现有 Access 身份验证及管理员 Session；未知服务拒绝访问。Cloudflare Zero Trust 的 MCP Hub Access 应用只需通过 `/admin` 和 `/admin/*` 保护全部管理页面（包括 `/admin/github` 和未来新增服务），共用**同一 Access 应用、同一 AUD**。不要启用 Bypass 或 Allow Everyone。原有 `/admin` 及 `/admin/api/*` 继续使用，新项目不提供旧服务管理地址的兼容路由或重定向；现有 `/github` OAuth Resource 和 MCP 客户端不受影响。
