@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
+import { openSync, closeSync, unlinkSync } from 'node:fs';
 import { RunnerDispatchClient } from '../src/control/runner-runtime-client.ts';
 import { createRunnerRuntimeTaskPort } from './runner-task-transport.mjs';
 import { createRunnerDaemon, createRunnerSequenceStore } from './runner-daemon.mjs';
@@ -26,24 +27,35 @@ export async function startCodingRunner(env = process.env) {
     origin: required(env, 'MCP_RUNTIME_LOCAL_ORIGIN'),
     runnerRuntimeToken: required(env, 'MCP_RUNNER_RUNTIME_TOKEN'),
   });
-  const daemon = createRunnerDaemon({
-    runner,
-    runtimePort: port,
-    heartbeatSequence: createRunnerSequenceStore(required(env, 'MCP_RUNNER_SEQUENCE_PATH')),
-    displayName: env.MCP_RUNNER_NAME || 'Fongap Coding Runner',
-    capabilities: ['coding.patch','coding.test'],
-    maxConcurrency: 1,
-  });
-  const controller = new AbortController();
-  const stop = () => { daemon.stop(); controller.abort(); };
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
+  const sequencePath = required(env, 'MCP_RUNNER_SEQUENCE_PATH');
+  const sequenceStore = createRunnerSequenceStore(sequencePath);
+  // One process per Runner identity. A crash leaves a lock to be inspected
+  // manually; automatic stale-lock removal could permit duplicate execution.
+  const lockPath = resolve(sequencePath) + '.lock';
+  const lockHandle = openSync(lockPath, 'wx', 0o600);
   try {
-    await daemon.run({ signal: controller.signal });
-    if (daemon.status.quarantined) throw new Error('runner_quarantined_manual_review_required');
+    const daemon = createRunnerDaemon({
+      runner,
+      runtimePort: port,
+      heartbeatSequence: sequenceStore,
+      displayName: env.MCP_RUNNER_NAME || 'Fongap Coding Runner',
+      capabilities: ['coding.patch','coding.test'],
+      maxConcurrency: 1,
+    });
+    const controller = new AbortController();
+    const stop = () => { daemon.stop(); controller.abort(); };
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+    try {
+      await daemon.run({ signal: controller.signal });
+      if (daemon.status.quarantined) throw new Error('runner_quarantined_manual_review_required');
+    } finally {
+      process.removeListener('SIGINT', stop);
+      process.removeListener('SIGTERM', stop);
+    }
   } finally {
-    process.removeListener('SIGINT', stop);
-    process.removeListener('SIGTERM', stop);
+    closeSync(lockHandle);
+    unlinkSync(lockPath);
   }
 }
 
