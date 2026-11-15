@@ -6,9 +6,6 @@
   "runner_profile": "production-deploy",
   "ignore_docs_only": true,
   "environments": {
-    "production": {},
-    "mcp-hub-beta": {
-      "source_branch": "dev"
-    }
+    "production": {}
   }
 }
