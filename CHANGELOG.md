@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 新增: MCP Hub 部署清单声明与 dev 绑定的 mcp-hub-beta 手动环境；当前部署脚本仍仅允许 production，独立 D1、队列、域名和凭据齐备前拒绝 Beta 上线。
+
 - 修复: 部署健康检查实际导入验证现有 RSA 私钥与活动 AES 密钥，密钥不可用则返回 503 并阻止发布绿灯；不会生成或覆盖 Secret。
 
 - 修复: GitHub 管理员添加账号时区分 Access、Session 与加密公钥错误；校验现有 RSA 私钥可导入，返回安全的 503 错误码，不覆盖任何密钥。
