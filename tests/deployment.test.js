@@ -139,7 +139,7 @@ test('source manifest scopes GitHub-managed Worker Secrets',async()=>{
     assert.match(allowed,new RegExp('^'+name+'$', 'm'));
   assert.doesNotMatch(allowed,/^MCP_ADMIN_KEY$|^MCP_APPROVAL_KEY$/m);
   const manifest=JSON.parse(readFileSync(new URL('../.github/deploy.json',import.meta.url),'utf8'));
-  assert.deepEqual(Object.keys(manifest.environments),['production']);
+  assert.deepEqual(manifest.environments,{production:{},'mcp-hub-beta':{source_branch:'dev'}});
   const script=readFileSync(new URL('../scripts/deploy.sh',import.meta.url),'utf8');
   assert.match(script,/runtime-secrets\.mjs prepare/);
   assert.match(script,/wrangler deploy --secrets-file "\$secrets" --config "\$config"/);
