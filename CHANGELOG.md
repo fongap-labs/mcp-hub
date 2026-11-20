@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 维护: 将 MCP Hub 测试包固定至 Action Worker 可信提交，中央 CI 首批双跑 Runner 协议与凭据隔离测试；原 23 个本地测试仍运行，不减覆盖，不改变部署或生产配置。
+
 - 维护: 撤销 2026-11-15 的 dev/Beta 部署实验逻辑，恢复 main 的正式发布与中央 CI；保留原历史变更记录及无关修复。
 
 - 新增: MCP Hub 部署清单声明与 dev 绑定的 mcp-hub-beta 手动环境；当前部署脚本仍仅允许 production，独立 D1、队列、域名和凭据齐备前拒绝 Beta 上线。
