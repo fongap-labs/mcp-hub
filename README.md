@@ -1,5 +1,8 @@
 # MCP Hub（Cloudflare Workers）
 
+文档导航：[文档索引](docs/README.md)
+
+
 > **MCP Hub · Fongap Labs · 通用 MCP 网关 · 模块化服务接入。** 产品以注册模块为单位提供独立的 MCP 工具、OAuth Resource 和管理入口。当前已实现 GitHub 模块；未来服务按相同协议接入，而不是把整个 Hub 定位为 GitHub MCP Server。
 
 > **隔离边界**：本共享 MCP Hub 不提供 `fongap-bot`、Action Worker 的任务提交、执行或权限代理工具。即使 GitHub Owner 相同，普通 MCP 客户端授权也不代表获准调用 Fongap Labs 的自动化机器人。专用 Agent 入口由 Action Worker 的 GitHub 原生工作流提供，使用独立的 GitHub 身份白名单校验，并由 Action Worker 再次检查仓库能力；不复用共享 MCP 的授权。共享 Hub 不保存或签发 fongap-bot 的 GitHub App 私钥及执行令牌。 普通 MCP 工具（包括创建 Issue）不能作为机器人任务执行的授权凭据。
