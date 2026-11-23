@@ -15,3 +15,6 @@ Follow Action Worker shared governance: [shared governance](https://github.com/f
 - Keep credentials out of files and logs. Existing encryption keys must not be regenerated over data; follow the migration and rotation procedure in README.md and the migration guides.
 - Run npm run validate for local type and test validation when changing product behavior.
 
+## Commit messages
+
+- Follow the organization’s required format for commit titles. Every non-empty Git commit body must use Chinese for its natural-language explanation; preserve technical identifiers, paths, and commands verbatim. See the [changelog conventions](https://github.com/fongap-labs/action-worker/blob/main/docs/04_CHANGELOG_CONVENTIONS.md).
