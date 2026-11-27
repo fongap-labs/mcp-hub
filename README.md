@@ -42,7 +42,7 @@ MCP Hub 为不同模块提供统一的 OAuth 客户端管理、权限策略和�
 ## 所需资源
 
 - Cloudflare 账号（Workers 与 D1）
-- Node.js 22+（测试使用 Node 22 的内置实验性 SQLite）
+- Node.js 26.13.1（与中央工具链基准一致，测试使用内置 SQLite）
 - 可运行 `npx wrangler` 的开发机器
 - GitHub fine-grained PAT；建议每个组织/账号单独使用最小仓库权限、设置有效期
 
@@ -143,7 +143,7 @@ npm run dev
 
 本地实际测试 OAuth 时，将 `MCP_PUBLIC_URL` 临时改成 `http://127.0.0.1:8787`（仅回环地址可使用 HTTP）；部署生产前务必恢复真实 HTTPS URL。
 
-测试含基本加密、跨账号隔离、Token 回显防护、管理员 Cookie 签名、OAuth 授权与刷新轮换、重放撤销、并发刷新及失效恢复限制。测试不需要真实 GitHub PAT；外部 GitHub API 请求用固定假数据模拟。Node 22 的 `node:sqlite` 测试可能打印实验性 API 提示。
+测试含基本加密、跨账号隔离、Token 回显防护、管理员 Cookie 签名、OAuth 授权与刷新轮换、重放撤销、并发刷新及失效恢复限制。测试不需要真实 GitHub PAT；外部 GitHub API 请求用固定假数据模拟。`node:sqlite` 测试可能打印运行时 API 提示。
 
 ## 安全边界说明
 
@@ -171,4 +171,4 @@ npm run dev
 
 ## TypeScript runtime (v0.1.0)
 
-The Cloudflare Worker runtime is implemented in strict TypeScript (`src/index.ts`). Wrangler builds the Worker directly; Node deployment scripts remain `.mjs`. The browser-facing `/admin/app.js` URL, OAuth endpoints, MCP tool identifiers, database schema and token formats are unchanged. Install dependencies with `npm install`, then run `npm run typecheck` and `npm test`; the centralized Action Worker CI runs both checks. The test runner uses Node.js 22.16+ type stripping to import `.ts` modules. See [migration notes](docs/TYPESCRIPT_MIGRATION.md).
+The Cloudflare Worker runtime is implemented in strict TypeScript (`src/index.ts`). Wrangler builds the Worker directly; Node deployment scripts remain `.mjs`. The browser-facing `/admin/app.js` URL, OAuth endpoints, MCP tool identifiers, database schema and token formats are unchanged. Install dependencies with `npm install`, then run `npm run typecheck` and `npm test`; the centralized Action Worker CI runs both checks. The test runner uses the central Node.js 26.13.1 runtime to import `.ts` modules. See [migration notes](docs/TYPESCRIPT_MIGRATION.md).

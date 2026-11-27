@@ -4,7 +4,7 @@ This change converts the Cloudflare Worker runtime modules from JavaScript to st
 
 - Worker entrypoint: `src/index.ts` (Wrangler builds the TypeScript worker directly).
 - Browser-served `/admin/app.js` remains JavaScript emitted from a template literal, preserving existing browser behavior.
-- Developer scripts remain Node.js `.mjs` and the existing tests remain `.js`, running with Node 22.16+ type stripping for imported TypeScript modules.
+- Developer scripts remain Node.js `.mjs` and the existing tests remain `.js`, running with the central Node.js 26.13.1 runtime for imported TypeScript modules.
 - `src/types.ts` defines the Worker environment, D1 API surface, OAuth and MCP auth contracts without `any`.
 - `npm run typecheck` runs `tsc --noEmit` with strict and `noUncheckedIndexedAccess`.
 - `npm run validate` runs type checking and all Node integration/security tests.
