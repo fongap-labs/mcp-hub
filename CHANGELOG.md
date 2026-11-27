@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- 维护: 对齐中央 Node.js 26.13.1 和 TypeScript 7.0.2 版本基准，并同步开发环境说明。
+- 维护: 对齐中央 Node.js 26.13.1 和 TypeScript 7.0.2 版本基准，同步开发环境说明，明确加密及认证字节数组使用普通 ArrayBuffer，兼容 Web Crypto 类型约束。
 
 - 维护: 明确非空 Git 提交正文必须使用中文。
 
