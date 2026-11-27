@@ -3,7 +3,7 @@ import {equals,now,sha} from './util.ts';
 
 const BASE32='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
-function secretBytes(value: string): Uint8Array {
+function secretBytes(value: string): Uint8Array<ArrayBuffer> {
   const source=value.toUpperCase();
   if (!/^[A-Z2-7]{32,128}$/.test(source)) throw new Error('Invalid TOTP secret');
   const bytes:number[]=[];let buffer=0,bits=0;

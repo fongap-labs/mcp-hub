@@ -24,12 +24,12 @@ export function html(body: string, status = 200, extra: Record<string, string> =
 const HTML_ESCAPES: Record<string, string> = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 export function escapeHtml(s: unknown): string { return String(s).replace(/[&<>"']/g, c => HTML_ESCAPES[c] ?? c); }
 export function b64(bytes: Uint8Array): string { return btoa(String.fromCharCode(...bytes)); }
-export function unb64(s: unknown): Uint8Array {
+export function unb64(s: unknown): Uint8Array<ArrayBuffer> {
   if (typeof s !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(s) || s.length > 16384 || s.length % 4 === 1) throw new Error('Invalid encoding');
   return Uint8Array.from(atob(s), c => c.charCodeAt(0));
 }
 export function b64u(bytes: Uint8Array): string { return b64(bytes).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
-export function unb64u(s: unknown): Uint8Array { if(typeof s !== 'string' || !/^[\w-]+$/.test(s) || s.length > 16384) throw new Error('Invalid encoding'); return unb64(s.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-s.length%4)%4)); }
+export function unb64u(s: unknown): Uint8Array<ArrayBuffer> { if(typeof s !== 'string' || !/^[\w-]+$/.test(s) || s.length > 16384) throw new Error('Invalid encoding'); return unb64(s.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-s.length%4)%4)); }
 export function randomId(): string { return b64u(crypto.getRandomValues(new Uint8Array(32))); }
 export async function sha(s: string): Promise<string> { return b64u(new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode(s)))); }
 export async function equals(a: unknown,b: unknown): Promise<boolean> {
