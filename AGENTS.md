@@ -11,13 +11,13 @@
 - Update existing authoritative documentation; no duplicate guides, task summaries or speculative plans.
 - Commit and PR titles: only feat/fix/chore, in English (e.g. `fix(auth): reject invalid token`). Every commit requires a blank line and a substantive Chinese body explaining why and what changed. No AI attribution.
 - Update only the Unreleased section of CHANGELOG.md with matching Chinese entries (feat=addition, fix=correction, chore=maintenance); do not rewrite released history.
-- Use the declared target branch; omitted targets mean main. main is stable/production; dev is Beta only when enabled. Never fall back to another branch. No direct protected-branch writes, cross-branch transfer or history rewrite without the applicable authorization.
+- Verify live branch existence before edits. When main and enabled dev coexist, all changes start from dev and target dev by PR; main accepts only maintainer-authorized dev-to-main PR transfers. Never create a parallel main fix. With main only, target main by PR. If branch facts are uncertain or dev is unavailable/disabled despite existing, stop; never fall back. No direct protected-branch writes or unauthorized transfers or history rewrites.
 - No secrets in code, logs or untrusted execution. No bypass of security, CI, merge or release gates. Never change tests merely to obtain green status.
 - Run the applicable central preflight before submission; fix introduced failures. Verify the final diff and actual outcomes. Report unverified checks and blockers; never claim success without fresh evidence.
 
 ## Branch rules
 
-- Use main only. Dev is disabled; do not initialize, target, publish or deploy from dev.
+- Dev is disabled; use main PRs only when dev is absent. If dev exists, stop for maintainer resolution; do not initialize, target, publish or deploy from dev.
 
 ## Repository rules
 
