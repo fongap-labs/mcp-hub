@@ -1,20 +1,2 @@
-# Agent Guide
-
-## Documentation map
-
-Read docs/README.md for the product documentation map.
-
-## Shared governance
-
-Follow Action Worker shared governance: [shared governance](https://github.com/fongap-labs/action-worker/blob/main/docs/01_SHARED_GOVERNANCE.md), [naming conventions](https://github.com/fongap-labs/action-worker/blob/main/docs/03_NAMING_CONVENTIONS.md), [changelog conventions](https://github.com/fongap-labs/action-worker/blob/main/docs/04_CHANGELOG_CONVENTIONS.md), and [development guide](https://github.com/fongap-labs/action-worker/blob/main/docs/DEVELOPMENT_GUIDE.md).
-
-## Project boundaries
-
-- Runtime modules, OAuth resources, and service contracts are documented in docs/MCP_MODULES.md, docs/RUNNER_PROTOCOL.md, and docs/RUNNER_DISPATCH.md.
-- Production deployment follows docs/CENTRAL_DEPLOY.md through Action Worker; preserve the thin bridge and do not create a repository-local deployment workflow.
-- Keep credentials out of files and logs. Existing encryption keys must not be regenerated over data; follow the migration and rotation procedure in README.md and the migration guides.
-- Run npm run validate for local type and test validation when changing product behavior.
-
-## Commit messages
-
-- Follow the organization’s required format for commit titles. Every non-empty Git commit body must use Chinese for its natural-language explanation; preserve technical identifiers, paths, and commands verbatim. See the [changelog conventions](https://github.com/fongap-labs/action-worker/blob/main/docs/04_CHANGELOG_CONVENTIONS.md).
+# AGENTS
+继承[中央规范](https://github.com/fongap-labs/action-worker/blob/main/AGENTS.md)。必读 docs/README.md 及 README.md。保留MCP、OAuth、Runner契约；禁止凭据入文件或日志，禁止重建存量加密密钥。部署归中央；行为变更执行 npm run validate。
